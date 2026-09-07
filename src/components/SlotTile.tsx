@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Repeat, Settings, ArrowRightToLine, ArrowLeftToLine } from "lucide-react";
+import { Repeat, ArrowRightToLine, ArrowLeftToLine } from "lucide-react";
 import type { SlotConfig, SlotRuntimeState } from "../types";
 import type { KeyLayoutEntry } from "../utils/keys";
 
@@ -85,18 +85,6 @@ export function SlotTile({ entry, slot, runtime, editMode, onActivate, onOpenEdi
 
       <div className="flex items-start justify-between pt-0.5">
         <span className={`font-mono text-xl font-bold leading-none ${keyTextClass}`}>{entry.display}</span>
-        {editMode && (
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onOpenEditor();
-            }}
-            className="rounded-sm border border-stage-border bg-stage-bg p-1 text-stage-muted hover:border-white hover:text-white"
-            aria-label="スロット編集"
-          >
-            <Settings size={12} />
-          </button>
-        )}
       </div>
 
       <div className="flex flex-1 items-center overflow-hidden py-1">
