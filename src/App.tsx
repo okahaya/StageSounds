@@ -4,6 +4,7 @@ import { AudioManager } from "./audio/AudioManager";
 import { Header } from "./components/Header";
 import { SlotGrid } from "./components/SlotGrid";
 import { SlotEditorModal } from "./components/SlotEditorModal";
+import { Toast, type ToastState } from "./components/Toast";
 import { useKeyboard } from "./hooks/useKeyboard";
 import {
   getLastActiveGroupId,
@@ -45,6 +46,7 @@ export default function App() {
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [runtimeByKey, setRuntimeByKey] = useState<Map<string, SlotRuntimeState>>(new Map());
   const [windowDragActive, setWindowDragActive] = useState(false);
+  const [toast, setToast] = useState<ToastState | null>(null);
 
   const currentGroup = groups.find((g) => g.id === currentGroupId) ?? null;
 
@@ -248,10 +250,16 @@ export default function App() {
 
   async function handleExport() {
     if (!currentGroup) return;
-    const blob = await presetStorageService.exportGroup(currentGroup, (fileName) =>
-      loadAudioFile(currentGroup.id, fileName),
-    );
-    presetStorageService.triggerDownload(blob, currentGroup.groupName);
+    try {
+      const blob = await presetStorageService.exportGroup(currentGroup, (fileName) =>
+        loadAudioFile(currentGroup.id, fileName),
+      );
+      presetStorageService.triggerDownload(blob, currentGroup.groupName);
+      setToast({ type: "success", message: `「${currentGroup.groupName}」を書き出しました` });
+    } catch (err) {
+      console.error("団体パッケージの書き出しに失敗しました", err);
+      setToast({ type: "error", message: "書き出しに失敗しました" });
+    }
   }
 
   async function handleImportFile(file: File) {
@@ -324,6 +332,8 @@ export default function App() {
         onExport={() => void handleExport()}
         onImportFile={(file) => void handleImportFile(file)}
       />
+
+      <Toast toast={toast} onDismiss={() => setToast(null)} />
 
       <div className="relative flex-1 overflow-auto">
         {currentGroup ? (
