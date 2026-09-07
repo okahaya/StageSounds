@@ -1,0 +1,117 @@
+name: デスクトップアプリ自動ビルド・リリース
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build portable Windows exe
+        run: npm run desktop:build:win-portable
+
+      - name: Rename artifact
+        shell: bash
+        run: |
+          mkdir -p dist-desktop
+          cp src-tauri/target/release/stagesounds.exe dist-desktop/StageSounds-Windows.exe
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-build
+          path: dist-desktop/StageSounds-Windows.exe
+
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build macOS .app
+        run: npm run desktop:build:mac-app
+
+      - name: Zip .app bundle
+        run: |
+          mkdir -p dist-desktop
+          ditto -c -k --sequesterRsrc --keepParent \
+            "src-tauri/target/release/bundle/macos/StageSounds.app" \
+            "dist-desktop/StageSounds-macOS.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-build
+          path: dist-desktop/StageSounds-macOS.zip
+
+  release:
+    needs: [build-windows, build-macos]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-build
+          path: dist-desktop
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: macos-build
+          path: dist-desktop
+
+      - name: 既存の latest リリースを削除（あれば）
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release delete latest --yes --cleanup-tag --repo ${{ github.repository }} || true
+
+      - name: リリースを公開
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: 最新ビルド (Latest Build)
+          make_latest: true
+          body: |
+            ## ダウンロード方法
+
+            - **Windows**: `StageSounds-Windows.exe` をダウンロードして、ダブルクリックで起動してください（インストール不要）。
+            - **Mac**: `StageSounds-macOS.zip` をダウンロードして解凍し、中の `StageSounds.app` をダブルクリックで起動してください。
+              - 初回起動時に「開発元が未確認のため開けません」と表示された場合は、アプリを右クリック（または Control+クリック）して「開く」を選んでください。
+
+            このリリースは main ブランチが更新されるたびに自動的に最新の内容に更新されます。
+          files: |
+            dist-desktop/StageSounds-Windows.exe
+            dist-desktop/StageSounds-macOS.zip

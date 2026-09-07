@@ -4,7 +4,21 @@
 React + TypeScript + Vite + Tailwind CSS + Web Audio API で構築されたブラウザ動作の Web アプリで、
 実行委員間の設定・音源共有は `.stagepack`（実体はZIP）アーカイブの入出力で行う。
 
-## セットアップ
+## 使い方（実行委員の方向け・これだけでOK）
+
+開発環境のセットアップは不要です。以下からダウンロードするだけで使えます。
+
+**👉 [最新版をダウンロード](https://github.com/okahaya/StageSounds/releases/latest)**
+
+1. 上のリンクを開く
+2. **Windows** の人は `StageSounds-Windows.exe` を、**Mac** の人は `StageSounds-macOS.zip` をクリックしてダウンロード
+3. Windows: ダウンロードした `.exe` をダブルクリックで起動（インストール不要）
+   Mac: ダウンロードした `.zip` を解凍し、中の `StageSounds.app` をダブルクリックで起動
+   （「開発元が未確認」と表示されたら、アプリを右クリック→「開く」を選択）
+
+これで完了です。以下はアプリを改造したい人（開発者）向けの説明です。
+
+## セットアップ（開発者向け）
 
 ```bash
 npm install
@@ -77,6 +91,13 @@ StageSounds/
 Vite の開発サーバー / `dist` ビルドと連携する形で Tauri (v2) を導入済み。ブラウザなしで動く
 ネイティブウィンドウのデスクトップアプリとしてビルドできる（`src-tauri/tauri.conf.json` の
 `build.devUrl` / `build.frontendDist` で連携設定）。
+
+**通常はビルドを手動で行う必要はありません。** `main` ブランチを更新するたびに GitHub Actions
+（[.github/workflows/release.yml](.github/workflows/release.yml)）が自動でWindows用 `.exe` と
+macOS用 `.app` をビルドし、[Releases](https://github.com/okahaya/StageSounds/releases/latest)
+ページに公開します。実行委員はそこからダウンロードするだけで済みます。
+
+以下は自分の手元で直接ビルドしたい開発者向けの手順です。
 
 ### 事前準備（初回のみ）
 
