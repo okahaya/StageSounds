@@ -1,4 +1,6 @@
+import { isTauri } from "@tauri-apps/api/core";
 import { openDB, type DBSchema, type IDBPDatabase } from "idb";
+import { deleteAudioFileFs, deleteGroupAudioFilesFs, loadAudioFileFs, saveAudioFileFs } from "./audioFsStore";
 import type { GroupProfile } from "../types";
 
 interface StageSoundsDB extends DBSchema {
@@ -52,6 +54,10 @@ export async function saveGroup(group: GroupProfile): Promise<void> {
 export async function deleteGroup(groupId: string): Promise<void> {
   const db = await getDb();
   await db.delete("groups", groupId);
+  if (isTauri()) {
+    await deleteGroupAudioFilesFs(groupId);
+    return;
+  }
   const tx = db.transaction("audioFiles", "readwrite");
   const keys = await tx.store.getAllKeys();
   const prefix = `${groupId}/`;
@@ -67,16 +73,25 @@ export async function loadAllGroups(): Promise<GroupProfile[]> {
 }
 
 export async function saveAudioFile(groupId: string, fileName: string, blob: Blob): Promise<void> {
+  if (isTauri()) {
+    return saveAudioFileFs(groupId, fileName, blob);
+  }
   const db = await getDb();
   await db.put("audioFiles", blob, audioFileKey(groupId, fileName));
 }
 
 export async function loadAudioFile(groupId: string, fileName: string): Promise<Blob | undefined> {
+  if (isTauri()) {
+    return loadAudioFileFs(groupId, fileName);
+  }
   const db = await getDb();
   return db.get("audioFiles", audioFileKey(groupId, fileName));
 }
 
 export async function deleteAudioFile(groupId: string, fileName: string): Promise<void> {
+  if (isTauri()) {
+    return deleteAudioFileFs(groupId, fileName);
+  }
   const db = await getDb();
   await db.delete("audioFiles", audioFileKey(groupId, fileName));
 }
