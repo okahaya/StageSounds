@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@tauri-apps/api": "^2.11.1",
+    "@tauri-apps/plugin-fs": "^2.5.2",
     "idb": "^8.0.0",
     "jszip": "^3.10.1",
     "lucide-react": "^0.475.0",
