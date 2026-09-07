@@ -45,8 +45,16 @@ export default function App() {
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [runtimeByKey, setRuntimeByKey] = useState<Map<string, SlotRuntimeState>>(new Map());
   const [windowDragActive, setWindowDragActive] = useState(false);
+  const [toast, setToast] = useState<{ message: string; tone: "success" | "error" } | null>(null);
 
   const currentGroup = groups.find((g) => g.id === currentGroupId) ?? null;
+
+  // トースト通知は一定時間後に自動で消える
+  useEffect(() => {
+    if (!toast) return;
+    const timer = window.setTimeout(() => setToast(null), 3000);
+    return () => window.clearTimeout(timer);
+  }, [toast]);
 
   // 初回ロード: IndexedDB から団体一覧を復元。なければ既定の団体を1つ作成する。
   useEffect(() => {
@@ -248,10 +256,18 @@ export default function App() {
 
   async function handleExport() {
     if (!currentGroup) return;
-    const blob = await presetStorageService.exportGroup(currentGroup, (fileName) =>
-      loadAudioFile(currentGroup.id, fileName),
-    );
-    presetStorageService.triggerDownload(blob, currentGroup.groupName);
+    try {
+      const blob = await presetStorageService.exportGroup(currentGroup, (fileName) =>
+        loadAudioFile(currentGroup.id, fileName),
+      );
+      presetStorageService.triggerDownload(blob, currentGroup.groupName);
+      setToast({ message: `「${currentGroup.groupName}」を書き出しました`, tone: "success" });
+    } catch (err) {
+      setToast({
+        message: err instanceof Error ? err.message : "書き出しに失敗しました",
+        tone: "error",
+      });
+    }
   }
 
   async function handleImportFile(file: File) {
@@ -346,6 +362,20 @@ export default function App() {
             <span className="font-mono text-lg font-bold uppercase tracking-wide text-white">
               .stagepack / .zip をドロップして団体を読み込み
             </span>
+          </div>
+        )}
+
+        {toast && (
+          <div className="pointer-events-none absolute right-4 top-4 z-50">
+            <div
+              className={`rounded-sm border px-3 py-2 font-mono text-xs font-bold uppercase tracking-wide shadow-lg ${
+                toast.tone === "success"
+                  ? "border-stage-playing/50 bg-stage-surface text-stage-playing"
+                  : "border-stage-danger/50 bg-stage-surface text-stage-danger"
+              }`}
+            >
+              {toast.message}
+            </div>
           </div>
         )}
       </div>
