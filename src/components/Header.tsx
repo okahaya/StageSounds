@@ -1,5 +1,5 @@
 import { useRef } from "react";
-import { Download, FolderPlus, Lock, OctagonX, Trash2, Unlock, Upload } from "lucide-react";
+import { Check, Download, FolderPlus, Pencil, Trash2, Upload } from "lucide-react";
 import type { GroupProfile } from "../types";
 
 interface HeaderProps {
@@ -13,8 +13,10 @@ interface HeaderProps {
   onToggleEditMode: () => void;
   onExport: () => void;
   onImportFile: (file: File) => void;
-  onPanic: () => void;
 }
+
+const btn =
+  "flex items-center gap-1.5 rounded-sm border border-stage-border bg-stage-surface2 px-2.5 py-1.5 text-xs font-medium text-white hover:border-white disabled:opacity-30 disabled:hover:border-stage-border";
 
 export function Header({
   groups,
@@ -27,78 +29,65 @@ export function Header({
   onToggleEditMode,
   onExport,
   onImportFile,
-  onPanic,
 }: HeaderProps) {
   const importInputRef = useRef<HTMLInputElement>(null);
 
   return (
-    <header className="flex flex-wrap items-center gap-3 border-b border-stage-border bg-stage-panel px-4 py-3">
+    <header className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 border-b border-stage-border bg-stage-surface px-4 py-2.5">
       <div className="flex items-center gap-2">
-        <span className="rounded bg-stage-accent px-2 py-1 font-mono text-sm font-black text-black">STAGE</span>
-        <span className="font-mono text-sm font-bold tracking-widest text-gray-300">SOUNDS</span>
+        <span className="rounded-sm border border-stage-border px-1.5 py-0.5 font-mono text-[10px] font-bold tracking-[0.2em] text-stage-muted">
+          STAGE SOUNDS
+        </span>
+        {editMode && (
+          <>
+            <div className="mx-1 h-6 w-px bg-stage-border" />
+            <button onClick={onCreateGroup} className={btn} title="新しい団体を作成">
+              <FolderPlus size={13} /> 新規団体
+            </button>
+            <button
+              onClick={onDeleteGroup}
+              disabled={!currentGroup}
+              className="flex items-center gap-1 rounded-sm border border-stage-danger/50 bg-stage-danger/10 px-2.5 py-1.5 text-xs font-medium text-stage-danger hover:border-stage-danger disabled:opacity-30"
+              title="この団体を削除"
+            >
+              <Trash2 size={13} />
+            </button>
+          </>
+        )}
       </div>
 
-      <div className="mx-2 h-6 w-px bg-stage-border" />
+      <div className="flex min-w-[16rem] items-center justify-center rounded-sm border border-stage-border bg-stage-bg px-6 py-1.5">
+        {editMode ? (
+          <input
+            value={currentGroup?.groupName ?? ""}
+            onChange={(e) => onRenameGroup(e.target.value)}
+            placeholder="団体名"
+            className="w-full bg-transparent text-center text-lg font-bold tracking-wide text-white outline-none placeholder:text-stage-muted"
+          />
+        ) : (
+          <span className="text-lg font-bold tracking-wide text-white">{currentGroup?.groupName ?? "団体未読込"}</span>
+        )}
+      </div>
 
-      {editMode ? (
-        <input
-          value={currentGroup?.groupName ?? ""}
-          onChange={(e) => onRenameGroup(e.target.value)}
-          placeholder="団体名"
-          className="rounded-md border border-stage-border bg-stage-panel2 px-3 py-1.5 text-sm font-semibold text-white outline-none focus:border-stage-accent2"
-        />
-      ) : (
-        <span className="px-1 text-sm font-semibold text-gray-100">{currentGroup?.groupName ?? "未読込"}</span>
-      )}
-
-      <select
-        value={currentGroup?.id ?? ""}
-        onChange={(e) => onSwitchGroup(e.target.value)}
-        className="rounded-md border border-stage-border bg-stage-panel2 px-2 py-1.5 text-sm text-gray-200 outline-none focus:border-stage-accent2"
-      >
-        {groups.length === 0 && <option value="">団体なし</option>}
-        {groups.map((g) => (
-          <option key={g.id} value={g.id}>
-            {g.groupName}
-          </option>
-        ))}
-      </select>
-
-      {editMode && (
-        <>
-          <button
-            onClick={onCreateGroup}
-            className="flex items-center gap-1 rounded-md bg-stage-panel2 px-2.5 py-1.5 text-xs text-gray-200 hover:bg-white/10"
-            title="新しい団体を作成"
-          >
-            <FolderPlus size={14} /> 新規団体
-          </button>
-          <button
-            onClick={onDeleteGroup}
-            disabled={!currentGroup}
-            className="flex items-center gap-1 rounded-md bg-stage-danger/15 px-2.5 py-1.5 text-xs text-stage-danger hover:bg-stage-danger/25 disabled:opacity-40"
-            title="この団体を削除"
-          >
-            <Trash2 size={14} />
-          </button>
-        </>
-      )}
-
-      <div className="ml-auto flex items-center gap-2">
-        <button
-          onClick={onExport}
-          disabled={!currentGroup}
-          className="flex items-center gap-1.5 rounded-md bg-stage-panel2 px-3 py-1.5 text-sm text-gray-200 hover:bg-white/10 disabled:opacity-40"
-          title="団体パッケージを書き出し (.stagepack)"
+      <div className="flex items-center justify-end gap-2">
+        <select
+          value={currentGroup?.id ?? ""}
+          onChange={(e) => onSwitchGroup(e.target.value)}
+          className="rounded-sm border border-stage-border bg-stage-surface2 px-2 py-1.5 text-xs text-white outline-none focus:border-white"
         >
-          <Download size={15} /> 書き出し
+          {groups.length === 0 && <option value="">団体なし</option>}
+          {groups.map((g) => (
+            <option key={g.id} value={g.id}>
+              {g.groupName}
+            </option>
+          ))}
+        </select>
+
+        <button onClick={onExport} disabled={!currentGroup} className={btn} title="団体パッケージを書き出し (.stagepack)">
+          <Download size={13} /> 書き出し
         </button>
-        <button
-          onClick={() => importInputRef.current?.click()}
-          className="flex items-center gap-1.5 rounded-md bg-stage-panel2 px-3 py-1.5 text-sm text-gray-200 hover:bg-white/10"
-          title="団体パッケージを読み込み"
-        >
-          <Upload size={15} /> 読み込み
+        <button onClick={() => importInputRef.current?.click()} className={btn} title="団体パッケージを読み込み">
+          <Upload size={13} /> 読み込み
         </button>
         <input
           ref={importInputRef}
@@ -114,21 +103,13 @@ export function Header({
 
         <button
           onClick={onToggleEditMode}
-          className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-semibold ${
-            editMode ? "bg-stage-accent2/20 text-stage-accent2" : "bg-stage-success/20 text-stage-success"
+          className={`flex items-center gap-1.5 rounded-sm border px-3 py-1.5 text-xs font-bold uppercase tracking-wide ${
+            editMode ? "border-white bg-white text-black" : "border-stage-border bg-stage-surface2 text-white hover:border-white"
           }`}
-          title="編集モード / 本番プレイモードの切り替え"
+          title="編集 / 編集完了の切り替え"
         >
-          {editMode ? <Unlock size={15} /> : <Lock size={15} />}
-          {editMode ? "編集モード" : "プレイモード"}
-        </button>
-
-        <button
-          onClick={onPanic}
-          className="flex items-center gap-1.5 rounded-md bg-stage-danger px-3 py-1.5 text-sm font-bold text-white hover:bg-stage-danger/80"
-          title="緊急停止 (Space / Esc)"
-        >
-          <OctagonX size={16} /> PANIC STOP
+          {editMode ? <Check size={14} /> : <Pencil size={14} />}
+          {editMode ? "編集完了" : "編集"}
         </button>
       </div>
     </header>

@@ -5,18 +5,23 @@ export default {
     extend: {
       colors: {
         stage: {
-          bg: "#0a0a0f",
-          panel: "#14141c",
-          panel2: "#1c1c26",
-          border: "#2a2a38",
-          accent: "#f97316",
-          accent2: "#22d3ee",
+          bg: "#0f1012",
+          surface: "#1e2227",
+          surface2: "#17191c",
+          border: "#2a2f37",
+          muted: "#9ba3af",
+          playing: "#00e676",
+          fading: "#f59e0b",
           danger: "#ef4444",
-          success: "#22c55e",
         },
       },
       fontFamily: {
-        mono: ["Consolas", "Menlo", "monospace"],
+        mono: ["ui-monospace", "SFMono-Regular", "Menlo", "Monaco", "Consolas", "monospace"],
+      },
+      borderRadius: {
+        sm: "3px",
+        DEFAULT: "3px",
+        md: "4px",
       },
     },
   },

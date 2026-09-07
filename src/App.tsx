@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { OctagonX } from "lucide-react";
 import { AudioManager } from "./audio/AudioManager";
 import { Header } from "./components/Header";
 import { SlotGrid } from "./components/SlotGrid";
@@ -286,7 +287,7 @@ export default function App() {
 
   if (loading) {
     return (
-      <div className="flex h-screen items-center justify-center bg-stage-bg text-gray-400">
+      <div className="flex h-screen items-center justify-center bg-stage-bg font-mono text-sm text-stage-muted">
         読み込み中…
       </div>
     );
@@ -322,7 +323,6 @@ export default function App() {
         onToggleEditMode={() => setEditMode((v) => !v)}
         onExport={() => void handleExport()}
         onImportFile={(file) => void handleImportFile(file)}
-        onPanic={handlePanic}
       />
 
       <div className="relative flex-1 overflow-auto">
@@ -336,23 +336,32 @@ export default function App() {
             onDropFile={(key, file) => void handleAssignFile(key, file)}
           />
         ) : (
-          <div className="flex h-full items-center justify-center text-gray-500">
+          <div className="flex h-full items-center justify-center font-mono text-sm text-stage-muted">
             団体がありません。「新規団体」から作成してください。
           </div>
         )}
 
         {windowDragActive && (
-          <div className="pointer-events-none absolute inset-0 flex items-center justify-center border-4 border-dashed border-stage-accent2 bg-stage-bg/80">
-            <span className="text-lg font-bold text-stage-accent2">
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center border-2 border-dashed border-white bg-stage-bg/90">
+            <span className="font-mono text-lg font-bold uppercase tracking-wide text-white">
               .stagepack / .zip をドロップして団体を読み込み
             </span>
           </div>
         )}
       </div>
 
-      <footer className="border-t border-stage-border bg-stage-panel px-4 py-1.5 text-center text-xs text-gray-500">
-        Space / Esc キーで緊急停止（PANIC STOP）　|　{editMode ? "編集モード: タイルをクリックして設定、ドラッグ&ドロップで音源割当" : "プレイモード: キー入力またはクリックで再生 / 停止"}
-      </footer>
+      <div className="border-t border-stage-border bg-stage-surface px-4 py-1 text-center font-mono text-[11px] uppercase tracking-wide text-stage-muted">
+        {editMode ? "編集中：タイルをクリックして設定、ドラッグ&ドロップで音源割当" : "プレイ中：キー入力またはクリックで再生 / 停止"}
+      </div>
+
+      <button
+        onClick={handlePanic}
+        className="flex h-14 w-full shrink-0 items-center justify-center gap-3 border-t-2 border-red-900 bg-stage-danger text-white shadow-[inset_0_2px_0_rgba(255,255,255,0.15),inset_0_-3px_0_rgba(0,0,0,0.35)] transition-colors hover:bg-red-500 active:shadow-[inset_0_3px_6px_rgba(0,0,0,0.5)]"
+        title="緊急停止 (Space / Esc)"
+      >
+        <OctagonX size={22} strokeWidth={2.5} />
+        <span className="font-mono text-base font-black uppercase tracking-[0.3em]">Space / Esc — All Stop</span>
+      </button>
 
       {editingSlot && (
         <SlotEditorModal

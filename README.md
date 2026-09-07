@@ -47,6 +47,9 @@ StageSounds/
         └── keys.ts                  # キーレイアウト定義（KeyboardEvent.code ベース）
 ```
 
+デスクトップアプリ化のための Tauri プロジェクトは `src-tauri/`（`tauri.conf.json`, `Cargo.toml`,
+`src/main.rs` 等）に生成されている。詳細は後述の「デスクトップアプリ化 (Tauri)」を参照。
+
 ## 主な機能
 
 - **低遅延再生**: 音源は割り当て時に `AudioBuffer` としてあらかじめデコードしメモリ保持。再生時は
@@ -56,9 +59,8 @@ StageSounds/
 - **フェードイン/アウト**: スロットごとに 0〜5.0 秒で指定。`GainNode.gain.linearRampToValueAtTime`
   で滑らかに音量変化させる。
 - **ループ再生**: スロットごとに ON/OFF。
-- **緊急停止 (PANIC STOP)**: Space / Esc キー、または画面右上のボタンで即座に無音化。
-- **編集モード / プレイモード**: 編集モードでのみスロット設定・ドラッグ&ドロップ割当・団体作成/削除が
-  可能。誤操作を防止する。
+- **緊急停止 (PANIC STOP)**: Space / Esc キー、または画面下部の帯状 PANIC STOP バーで即座に無音化。
+- **編集 / 編集完了**: 編集中のみスロット設定・ドラッグ&ドロップ割当・団体作成/削除が可能。誤操作を防止する。
 - **団体プリセットの共有**: `.stagepack`（ZIP）として団体名・キー割当・フェード・ループ設定と音声実体
   をひとまとめに書き出し／読み込み。アーカイブ内は `manifest.json` + `audio/` の相対参照のみで完結する
   ため、Windows / macOS 間でファイルパス不一致が起きない。
@@ -69,3 +71,48 @@ StageSounds/
 `KeyboardEvent.code`（物理キー位置）を基準にスロットを割り当てているため、キーボードの入力言語設定
 （日本語/英語配列など）に左右されずに同じ物理キーで同じ音が鳴る。対象は数字列 `1`–`0` と `QWERTY` /
 `ASDFGHJKL` / `ZXCVBNM` の各行。
+
+## デスクトップアプリ化 (Tauri)
+
+Vite の開発サーバー / `dist` ビルドと連携する形で Tauri (v2) を導入済み。ブラウザなしで動く
+ネイティブウィンドウのデスクトップアプリとしてビルドできる（`src-tauri/tauri.conf.json` の
+`build.devUrl` / `build.frontendDist` で連携設定）。
+
+### 事前準備（初回のみ）
+
+- **共通**: Rust ツールチェイン（[rustup](https://rustup.rs/) でインストール）
+- **Windows**: Visual Studio の「C++ によるデスクトップ開発」ワークロード（MSVC ビルドツール）
+- **macOS**: Xcode Command Line Tools（`xcode-select --install`）
+
+### 開発時の起動
+
+```bash
+npm run desktop:dev   # tauri dev — ネイティブウィンドウが Vite 開発サーバーを表示（HMR対応）
+```
+
+### ポータブル版のビルド
+
+インストーラー（NSIS/MSI や dmg）は作らず、ダブルクリックでそのまま起動する単一ファイルを出力する。
+
+```bash
+# Windows: ポータブル単一 .exe
+npm run desktop:build:win-portable
+# -> src-tauri/target/release/stagesounds.exe
+
+# macOS: .app バンドル（dmgインストーラーは作らない）
+npm run desktop:build:mac-app
+# -> src-tauri/target/release/bundle/macos/StageSounds.app
+```
+
+- `--no-bundle`（Windows用スクリプト）は Rust バイナリのコンパイルのみ行い、NSIS/MSI インストーラー
+  作成をスキップする。生成される `stagesounds.exe` は単一ファイルで、USBメモリ等からそのまま
+  ダブルクリック起動できる（Windows 10/11 標準搭載の WebView2 ランタイムを利用するため、追加インストール
+  は基本的に不要）。
+- `--bundles app`（macOS用スクリプト）は `.app` バンドルのみを生成し、`.dmg` インストーラー作成をスキップ
+  する。`.app` はそのまま Dock やデスクトップに置いて起動できる、Mac標準の実行形式。
+- 初回ビルドは Rust の依存クレートをすべてコンパイルするため数分〜十数分かかるが、2回目以降は
+  差分コンパイルになり大幅に短縮される。
+- 未署名バイナリのため、macOS では初回起動時に Gatekeeper の警告が出ることがある
+  （右クリック→「開く」で回避可能）。学祭内利用のような限定配布では通常問題ない。
+- ビルド成果物（`src-tauri/target/`）は `.gitignore` 対象。配布時はビルド後のファイルを直接
+  USBメモリ等にコピーする。
