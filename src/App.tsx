@@ -6,6 +6,7 @@ import { SlotGrid } from "./components/SlotGrid";
 import { SlotEditorModal } from "./components/SlotEditorModal";
 import { Toast, type ToastState } from "./components/Toast";
 import { useKeyboard } from "./hooks/useKeyboard";
+import { useReloadGuard } from "./hooks/useReloadGuard";
 import {
   getLastActiveGroupId,
   loadAllGroups,
@@ -287,6 +288,11 @@ export default function App() {
     onPanic: handlePanic,
     suspended: editingKey !== null,
   });
+
+  // 音声が登録されている、または再生中のときは誤リロード・誤離脱を防止する。
+  const hasRegisteredAudio = currentGroup?.slots.some((s) => !!s.fileName) ?? false;
+  const isPlaying = Array.from(runtimeByKey.values()).some((r) => r.state !== "idle");
+  useReloadGuard(hasRegisteredAudio || isPlaying);
 
   const editingSlot = currentGroup?.slots.find((s) => s.key === editingKey) ?? null;
 
