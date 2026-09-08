@@ -8,12 +8,15 @@ import { Toast, type ToastState } from "./components/Toast";
 import { WaveformDisplay } from "./components/WaveformDisplay";
 import { useKeyboard } from "./hooks/useKeyboard";
 import { useReloadGuard } from "./hooks/useReloadGuard";
+import { computePeaks } from "./audio/waveformPeaks";
 import {
   getLastActiveGroupId,
   loadAllGroups,
   loadAudioFile,
+  loadWaveformPeaks,
   saveAudioFile,
   saveGroup,
+  saveWaveformPeaks,
   deleteGroup as deleteGroupFromDb,
   setLastActiveGroupId,
 } from "./storage/db";
@@ -40,6 +43,7 @@ const IMPORT_EXTENSIONS = [".zip", ".stagepack"];
 export default function App() {
   const audioManagerRef = useRef<AudioManager>(new AudioManager());
   const buffersRef = useRef<Map<string, Map<string, AudioBuffer>>>(new Map());
+  const peaksRef = useRef<Map<string, Map<string, Float32Array>>>(new Map());
 
   const [loading, setLoading] = useState(true);
   const [groups, setGroups] = useState<GroupProfile[]>([]);
@@ -49,7 +53,34 @@ export default function App() {
   const [runtimeByKey, setRuntimeByKey] = useState<Map<string, SlotRuntimeState>>(new Map());
   const [windowDragActive, setWindowDragActive] = useState(false);
   const [toast, setToast] = useState<ToastState | null>(null);
-  const [waveformSlot, setWaveformSlot] = useState<{ key: string; buffer: AudioBuffer; label: string } | null>(null);
+  const [waveformSlot, setWaveformSlot] = useState<{
+    key: string;
+    peaks: Float32Array | null;
+    duration: number;
+    label: string;
+  } | null>(null);
+
+  /** ファイル名に対応するピーク配列を取得する。メモリ→IndexedDBの順に探し、無ければ新規計算して両方に保存する。 */
+  async function getOrComputePeaks(groupId: string, fileName: string, buffer: AudioBuffer): Promise<Float32Array> {
+    let groupPeaks = peaksRef.current.get(groupId);
+    if (!groupPeaks) {
+      groupPeaks = new Map();
+      peaksRef.current.set(groupId, groupPeaks);
+    }
+    const cached = groupPeaks.get(fileName);
+    if (cached) return cached;
+
+    const stored = await loadWaveformPeaks(groupId, fileName);
+    if (stored) {
+      groupPeaks.set(fileName, stored);
+      return stored;
+    }
+
+    const computed = computePeaks(buffer);
+    groupPeaks.set(fileName, computed);
+    void saveWaveformPeaks(groupId, fileName, computed);
+    return computed;
+  }
 
   const currentGroup = groups.find((g) => g.id === currentGroupId) ?? null;
 
@@ -115,6 +146,7 @@ export default function App() {
           const buffer = await audioManagerRef.current.decode(arrayBuffer);
           buffers.set(slot.fileName, buffer);
           if (cancelled) continue;
+          void getOrComputePeaks(group.id, slot.fileName, buffer);
           setRuntimeByKey((prev) => {
             const next = new Map(prev);
             for (const s of group.slots) {
@@ -167,7 +199,18 @@ export default function App() {
     if (!slot || !slot.fileName) return;
     const buffer = buffersRef.current.get(currentGroup.id)?.get(slot.fileName);
     if (!buffer) return;
-    setWaveformSlot({ key, buffer, label: slot.label });
+
+    // 波形取得はトリガーのレイテンシに影響させない: キャッシュ済みなら即反映、無ければバックグラウンドで計算して後から反映する。
+    const groupId = currentGroup.id;
+    const fileName = slot.fileName;
+    const cachedPeaks = peaksRef.current.get(groupId)?.get(fileName) ?? null;
+    setWaveformSlot({ key, peaks: cachedPeaks, duration: buffer.duration, label: slot.label });
+    if (!cachedPeaks) {
+      void getOrComputePeaks(groupId, fileName, buffer).then((peaks) => {
+        setWaveformSlot((prev) => (prev && prev.key === key ? { ...prev, peaks } : prev));
+      });
+    }
+
     await audioManagerRef.current.resume();
     audioManagerRef.current.trigger(key, buffer, { fadeIn: slot.fadeIn, fadeOut: slot.fadeOut, loop: slot.loop });
   }
@@ -189,6 +232,7 @@ export default function App() {
       buffersRef.current.set(groupId, groupBuffers);
     }
     groupBuffers.set(file.name, buffer);
+    void getOrComputePeaks(groupId, file.name, buffer);
 
     updateGroup(groupId, (g) => ({
       ...g,
@@ -243,6 +287,7 @@ export default function App() {
     const deletingId = currentGroup.id;
     await deleteGroupFromDb(deletingId);
     buffersRef.current.delete(deletingId);
+    peaksRef.current.delete(deletingId);
     const remaining = groups.filter((g) => g.id !== deletingId);
     setGroups(remaining);
     setCurrentGroupId(remaining[0]?.id ?? null);
@@ -256,8 +301,13 @@ export default function App() {
   async function handleExport() {
     if (!currentGroup) return;
     try {
-      const blob = await presetStorageService.exportGroup(currentGroup, (fileName) =>
-        loadAudioFile(currentGroup.id, fileName),
+      const blob = await presetStorageService.exportGroup(
+        currentGroup,
+        (fileName) => loadAudioFile(currentGroup.id, fileName),
+        (fileName) => {
+          const cached = peaksRef.current.get(currentGroup.id)?.get(fileName);
+          return cached ? Promise.resolve(cached) : loadWaveformPeaks(currentGroup.id, fileName);
+        },
       );
       presetStorageService.triggerDownload(blob, currentGroup.groupName);
       setToast({ type: "success", message: `「${currentGroup.groupName}」を書き出しました` });
@@ -270,9 +320,17 @@ export default function App() {
   async function handleImportFile(file: File) {
     try {
       const newId = crypto.randomUUID();
-      const { profile, audioBlobs } = await presetStorageService.importGroup(file, newId);
+      const { profile, audioBlobs, waveforms } = await presetStorageService.importGroup(file, newId);
       for (const [fileName, blob] of audioBlobs) {
         await saveAudioFile(newId, fileName, blob);
+      }
+      if (waveforms.size > 0) {
+        const groupPeaks = new Map<string, Float32Array>();
+        peaksRef.current.set(newId, groupPeaks);
+        for (const [fileName, peaks] of waveforms) {
+          groupPeaks.set(fileName, peaks);
+          await saveWaveformPeaks(newId, fileName, peaks);
+        }
       }
       await saveGroup(profile);
       setGroups((prev) => [...prev, profile]);
@@ -373,7 +431,8 @@ export default function App() {
       <WaveformDisplay
         audioManager={audioManagerRef.current}
         slotKey={waveformSlot?.key ?? null}
-        buffer={waveformSlot?.buffer ?? null}
+        peaks={waveformSlot?.peaks ?? null}
+        duration={waveformSlot?.duration ?? 0}
         label={waveformSlot?.label ?? ""}
         playbackState={(waveformSlot && runtimeByKey.get(waveformSlot.key)?.state) || "idle"}
       />

@@ -1,4 +1,5 @@
 import JSZip from "jszip";
+import { peaksFromJson, peaksToJson } from "../audio/waveformPeaks";
 import type { GroupProfile, ManifestV1, SlotConfig } from "../types";
 
 const MANIFEST_FILENAME = "manifest.json";
@@ -8,6 +9,8 @@ export interface ImportedGroup {
   profile: GroupProfile;
   /** ファイル名 -> 実体音声データ。呼び出し側で IndexedDB 保存 & AudioBuffer デコードを行う。 */
   audioBlobs: Map<string, Blob>;
+  /** ファイル名 -> 波形ピーク配列。manifest に含まれていた場合のみ。呼び出し側でキャッシュ・永続化する。 */
+  waveforms: Map<string, Float32Array>;
 }
 
 /**
@@ -19,8 +22,25 @@ export class PresetStorageService {
   async exportGroup(
     group: GroupProfile,
     resolveAudioBlob: (fileName: string) => Promise<Blob | undefined>,
+    resolveWaveformPeaks?: (fileName: string) => Promise<Float32Array | undefined>,
   ): Promise<Blob> {
     const zip = new JSZip();
+
+    const waveforms: Record<string, number[]> = {};
+    const audioFolder = zip.folder(AUDIO_DIR)!;
+    const seenFiles = new Set<string>();
+    for (const slot of group.slots) {
+      if (!slot.fileName || seenFiles.has(slot.fileName)) continue;
+      seenFiles.add(slot.fileName);
+      const blob = await resolveAudioBlob(slot.fileName);
+      if (blob) {
+        audioFolder.file(slot.fileName, blob);
+      }
+      const peaks = await resolveWaveformPeaks?.(slot.fileName);
+      if (peaks) {
+        waveforms[slot.fileName] = peaksToJson(peaks);
+      }
+    }
 
     const manifest: ManifestV1 = {
       version: "1.0",
@@ -34,19 +54,9 @@ export class PresetStorageService {
         fadeOut: s.fadeOut,
         loop: s.loop,
       })),
+      waveforms,
     };
     zip.file(MANIFEST_FILENAME, JSON.stringify(manifest, null, 2));
-
-    const audioFolder = zip.folder(AUDIO_DIR)!;
-    const seenFiles = new Set<string>();
-    for (const slot of group.slots) {
-      if (!slot.fileName || seenFiles.has(slot.fileName)) continue;
-      seenFiles.add(slot.fileName);
-      const blob = await resolveAudioBlob(slot.fileName);
-      if (blob) {
-        audioFolder.file(slot.fileName, blob);
-      }
-    }
 
     return zip.generateAsync({ type: "blob", compression: "DEFLATE", compressionOptions: { level: 6 } });
   }
@@ -77,12 +87,17 @@ export class PresetStorageService {
     }
 
     const audioBlobs = new Map<string, Blob>();
+    const waveforms = new Map<string, Float32Array>();
     for (const slot of manifest.slots) {
       if (!slot.fileName) continue;
       const entry = zip.file(`${AUDIO_DIR}/${slot.fileName}`);
       if (entry) {
         const blob = await entry.async("blob");
         audioBlobs.set(slot.fileName, blob);
+      }
+      const peaks = manifest.waveforms?.[slot.fileName];
+      if (peaks) {
+        waveforms.set(slot.fileName, peaksFromJson(peaks));
       }
     }
 
@@ -102,7 +117,7 @@ export class PresetStorageService {
       slots,
     };
 
-    return { profile, audioBlobs };
+    return { profile, audioBlobs, waveforms };
   }
 }
 

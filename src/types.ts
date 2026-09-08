@@ -33,6 +33,8 @@ export interface ManifestV1 {
     fadeOut: number;
     loop: boolean;
   }>;
+  /** fileName -> 波形ピーク配列(min/max交互, 固定解像度)。旧バージョンの manifest には存在しない。 */
+  waveforms?: Record<string, number[]>;
 }
 
 export interface SlotRuntimeState {
