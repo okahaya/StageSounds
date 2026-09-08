@@ -39,7 +39,7 @@ export default defineConfig({
       workbox: {
         // ステージ現場での完全オフライン起動のため、ビルド成果物一式を Service Worker に
         // プリキャッシュする（ネットワーク遮断下での F5 リロード・ブラウザ再起動に対応）。
-        globPatterns: ["**/*.{js,css,html,svg,png,ico,woff,woff2,ttf,eot}"],
+        globPatterns: ["**/*.{js,css,html,svg,png,ico,woff,woff2,ttf,eot,webmanifest,json}"],
       },
     }),
   ],
