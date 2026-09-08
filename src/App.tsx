@@ -5,6 +5,7 @@ import { Header } from "./components/Header";
 import { SlotGrid } from "./components/SlotGrid";
 import { SlotEditorModal } from "./components/SlotEditorModal";
 import { Toast, type ToastState } from "./components/Toast";
+import { WaveformDisplay } from "./components/WaveformDisplay";
 import { useKeyboard } from "./hooks/useKeyboard";
 import { useReloadGuard } from "./hooks/useReloadGuard";
 import {
@@ -48,6 +49,7 @@ export default function App() {
   const [runtimeByKey, setRuntimeByKey] = useState<Map<string, SlotRuntimeState>>(new Map());
   const [windowDragActive, setWindowDragActive] = useState(false);
   const [toast, setToast] = useState<ToastState | null>(null);
+  const [waveformSlot, setWaveformSlot] = useState<{ key: string; buffer: AudioBuffer; label: string } | null>(null);
 
   const currentGroup = groups.find((g) => g.id === currentGroupId) ?? null;
 
@@ -78,6 +80,7 @@ export default function App() {
   useEffect(() => {
     const group = groups.find((g) => g.id === currentGroupId) ?? null;
     audioManagerRef.current.panicStop();
+    setWaveformSlot(null);
 
     if (!group) {
       setRuntimeByKey(new Map());
@@ -164,6 +167,7 @@ export default function App() {
     if (!slot || !slot.fileName) return;
     const buffer = buffersRef.current.get(currentGroup.id)?.get(slot.fileName);
     if (!buffer) return;
+    setWaveformSlot({ key, buffer, label: slot.label });
     await audioManagerRef.current.resume();
     audioManagerRef.current.trigger(key, buffer, { fadeIn: slot.fadeIn, fadeOut: slot.fadeOut, loop: slot.loop });
   }
@@ -365,6 +369,14 @@ export default function App() {
           </div>
         )}
       </div>
+
+      <WaveformDisplay
+        audioManager={audioManagerRef.current}
+        slotKey={waveformSlot?.key ?? null}
+        buffer={waveformSlot?.buffer ?? null}
+        label={waveformSlot?.label ?? ""}
+        playbackState={(waveformSlot && runtimeByKey.get(waveformSlot.key)?.state) || "idle"}
+      />
 
       <div className="border-t border-stage-border bg-stage-surface px-4 py-1 text-center font-mono text-[11px] uppercase tracking-wide text-stage-muted">
         {editMode ? "編集中：タイルをクリックして設定、ドラッグ&ドロップで音源割当" : "プレイ中：キー入力またはクリックで再生 / 停止"}

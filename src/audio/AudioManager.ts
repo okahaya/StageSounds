@@ -22,6 +22,8 @@ interface ActivePlayback {
   fadeOut: number;
   /** 手動 stop() 済みで onended による二重クリアを無視すべきか */
   stopping: boolean;
+  /** 再生開始時の AudioContext.currentTime。経過時間の算出に使う。 */
+  startTime: number;
 }
 
 /**
@@ -56,6 +58,16 @@ export class AudioManager extends EventTarget {
 
   get currentSlotKey(): KeyCode | null {
     return this.active?.slotKey ?? null;
+  }
+
+  /** 指定スロットが再生中の場合、その経過再生位置(秒)を返す。再生中でなければ null。 */
+  getPlaybackTime(slotKey: KeyCode): number | null {
+    if (!this.active || this.active.slotKey !== slotKey) return null;
+    const { source, startTime } = this.active;
+    const buffer = source.buffer;
+    if (!buffer || buffer.duration <= 0) return 0;
+    const elapsed = this.ctx.currentTime - startTime;
+    return source.loop ? elapsed % buffer.duration : Math.min(elapsed, buffer.duration);
   }
 
   /**
@@ -107,7 +119,14 @@ export class AudioManager extends EventTarget {
       gain.gain.setValueAtTime(1, now);
     }
 
-    const playback: ActivePlayback = { slotKey, source, gain, fadeOut: options.fadeOut, stopping: false };
+    const playback: ActivePlayback = {
+      slotKey,
+      source,
+      gain,
+      fadeOut: options.fadeOut,
+      stopping: false,
+      startTime: now,
+    };
 
     source.onended = () => {
       if (this.active === playback) {
