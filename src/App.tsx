@@ -8,7 +8,7 @@ import { Toast, type ToastState } from "./components/Toast";
 import { WaveformDisplay } from "./components/WaveformDisplay";
 import { useKeyboard } from "./hooks/useKeyboard";
 import { useReloadGuard } from "./hooks/useReloadGuard";
-import { computePeaks } from "./audio/waveformPeaks";
+import { computePeaksAsync } from "./audio/waveformPeaks";
 import {
   getLastActiveGroupId,
   loadAllGroups,
@@ -44,6 +44,7 @@ export default function App() {
   const audioManagerRef = useRef<AudioManager>(new AudioManager());
   const buffersRef = useRef<Map<string, Map<string, AudioBuffer>>>(new Map());
   const peaksRef = useRef<Map<string, Map<string, Float32Array>>>(new Map());
+  const peaksInFlightRef = useRef<Map<string, Promise<Float32Array>>>(new Map());
 
   const [loading, setLoading] = useState(true);
   const [groups, setGroups] = useState<GroupProfile[]>([]);
@@ -60,7 +61,10 @@ export default function App() {
     label: string;
   } | null>(null);
 
-  /** ファイル名に対応するピーク配列を取得する。メモリ→IndexedDBの順に探し、無ければ新規計算して両方に保存する。 */
+  /**
+   * ファイル名に対応するピーク配列を取得する。メモリ→IndexedDBの順に探し、無ければ新規計算して両方に保存する。
+   * 同一ファイルに対する同時呼び出しは1回の計算にまとめる(重複した重い走査を避けるため)。
+   */
   async function getOrComputePeaks(groupId: string, fileName: string, buffer: AudioBuffer): Promise<Float32Array> {
     let groupPeaks = peaksRef.current.get(groupId);
     if (!groupPeaks) {
@@ -70,16 +74,28 @@ export default function App() {
     const cached = groupPeaks.get(fileName);
     if (cached) return cached;
 
-    const stored = await loadWaveformPeaks(groupId, fileName);
-    if (stored) {
-      groupPeaks.set(fileName, stored);
-      return stored;
-    }
+    const inFlightKey = `${groupId}/${fileName}`;
+    const inFlight = peaksInFlightRef.current.get(inFlightKey);
+    if (inFlight) return inFlight;
 
-    const computed = computePeaks(buffer);
-    groupPeaks.set(fileName, computed);
-    void saveWaveformPeaks(groupId, fileName, computed);
-    return computed;
+    const promise = (async () => {
+      const stored = await loadWaveformPeaks(groupId, fileName);
+      if (stored) {
+        groupPeaks.set(fileName, stored);
+        return stored;
+      }
+      const computed = await computePeaksAsync(buffer);
+      groupPeaks.set(fileName, computed);
+      void saveWaveformPeaks(groupId, fileName, computed);
+      return computed;
+    })();
+
+    peaksInFlightRef.current.set(inFlightKey, promise);
+    try {
+      return await promise;
+    } finally {
+      peaksInFlightRef.current.delete(inFlightKey);
+    }
   }
 
   const currentGroup = groups.find((g) => g.id === currentGroupId) ?? null;
