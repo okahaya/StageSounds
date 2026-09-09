@@ -17,8 +17,15 @@ function yieldToEventLoop(): Promise<void> {
  * メインスレッドへ制御を返しながら分割実行する。これにより、キャッシュ未生成の状態で
  * 誤って再生・計算が走った場合でも、緊急停止やキー入力などの操作がブロックされ続けることを防ぐ
  * (ステージ本番中に操作不能になることは許容できないため)。
+ *
+ * `signal` を渡すと、外部からの中断(タイムアウト・別音源への切替など)でチャンクの節目に
+ * 即座に処理を打ち切れる(`AbortError` を投げる)。中断された計算はキャッシュに保存されない。
  */
-export async function computePeaksAsync(buffer: AudioBuffer, resolution: number = PEAK_RESOLUTION): Promise<Float32Array> {
+export async function computePeaksAsync(
+  buffer: AudioBuffer,
+  resolution: number = PEAK_RESOLUTION,
+  signal?: AbortSignal,
+): Promise<Float32Array> {
   const channelCount = buffer.numberOfChannels;
   const length = buffer.length;
   const samplesPerBucket = Math.max(1, Math.floor(length / resolution));
@@ -28,6 +35,7 @@ export async function computePeaksAsync(buffer: AudioBuffer, resolution: number 
 
   let x = 0;
   while (x < resolution) {
+    if (signal?.aborted) throw new DOMException("computePeaksAsync aborted", "AbortError");
     const chunkStart = performance.now();
     while (x < resolution && performance.now() - chunkStart < CHUNK_BUDGET_MS) {
       const start = x * samplesPerBucket;

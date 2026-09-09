@@ -5,7 +5,7 @@ import { Header } from "./components/Header";
 import { SlotGrid } from "./components/SlotGrid";
 import { SlotEditorModal } from "./components/SlotEditorModal";
 import { Toast, type ToastState } from "./components/Toast";
-import { WaveformDisplay } from "./components/WaveformDisplay";
+import { WaveformDisplay, type WaveformStatus } from "./components/WaveformDisplay";
 import { useKeyboard } from "./hooks/useKeyboard";
 import { useReloadGuard } from "./hooks/useReloadGuard";
 import { computePeaksAsync } from "./audio/waveformPeaks";
@@ -40,11 +40,14 @@ function createEmptyGroup(name: string): GroupProfile {
 
 const IMPORT_EXTENSIONS = [".zip", ".stagepack"];
 
+/** 波形計算に許容する最大時間。これを超えたら打ち切って「失敗」表示にする(再生自体は待たせない)。 */
+const PEAK_TIMEOUT_MS = 4000;
+
 export default function App() {
   const audioManagerRef = useRef<AudioManager>(new AudioManager());
   const buffersRef = useRef<Map<string, Map<string, AudioBuffer>>>(new Map());
   const peaksRef = useRef<Map<string, Map<string, Float32Array>>>(new Map());
-  const peaksInFlightRef = useRef<Map<string, Promise<Float32Array>>>(new Map());
+  const peaksInFlightRef = useRef<Map<string, Promise<Float32Array | null>>>(new Map());
 
   const [loading, setLoading] = useState(true);
   const [groups, setGroups] = useState<GroupProfile[]>([]);
@@ -56,6 +59,7 @@ export default function App() {
   const [toast, setToast] = useState<ToastState | null>(null);
   const [waveformSlot, setWaveformSlot] = useState<{
     key: string;
+    status: WaveformStatus;
     peaks: Float32Array | null;
     duration: number;
     label: string;
@@ -64,8 +68,12 @@ export default function App() {
   /**
    * ファイル名に対応するピーク配列を取得する。メモリ→IndexedDBの順に探し、無ければ新規計算して両方に保存する。
    * 同一ファイルに対する同時呼び出しは1回の計算にまとめる(重複した重い走査を避けるため)。
+   *
+   * 計算がエラーになった場合、または PEAK_TIMEOUT_MS を超えて完了しない場合は打ち切り、
+   * null を返す(例外は投げない)。呼び出し側はこれを「波形表示だけ失敗」として扱い、
+   * 音源の再生自体には一切影響させない。
    */
-  async function getOrComputePeaks(groupId: string, fileName: string, buffer: AudioBuffer): Promise<Float32Array> {
+  async function getOrComputePeaks(groupId: string, fileName: string, buffer: AudioBuffer): Promise<Float32Array | null> {
     let groupPeaks = peaksRef.current.get(groupId);
     if (!groupPeaks) {
       groupPeaks = new Map();
@@ -78,16 +86,36 @@ export default function App() {
     const inFlight = peaksInFlightRef.current.get(inFlightKey);
     if (inFlight) return inFlight;
 
-    const promise = (async () => {
-      const stored = await loadWaveformPeaks(groupId, fileName);
-      if (stored) {
-        groupPeaks.set(fileName, stored);
-        return stored;
+    const promise = (async (): Promise<Float32Array | null> => {
+      try {
+        const stored = await loadWaveformPeaks(groupId, fileName);
+        if (stored) {
+          groupPeaks.set(fileName, stored);
+          return stored;
+        }
+      } catch (err) {
+        console.error(`波形キャッシュの読み込みに失敗しました: ${fileName}`, err);
+        // 読み込み失敗は致命的ではないため、新規計算にフォールバックする。
       }
-      const computed = await computePeaksAsync(buffer);
-      groupPeaks.set(fileName, computed);
-      void saveWaveformPeaks(groupId, fileName, computed);
-      return computed;
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), PEAK_TIMEOUT_MS);
+      try {
+        const computed = await computePeaksAsync(buffer, undefined, controller.signal);
+        groupPeaks.set(fileName, computed);
+        try {
+          await saveWaveformPeaks(groupId, fileName, computed);
+        } catch (err) {
+          console.error(`波形キャッシュの保存に失敗しました: ${fileName}`, err);
+          // 保存の失敗は表示自体には影響しないため無視する(次回また計算し直すだけ)。
+        }
+        return computed;
+      } catch (err) {
+        console.error(`波形の計算に失敗しました(タイムアウトまたはエラー): ${fileName}`, err);
+        return null;
+      } finally {
+        clearTimeout(timeoutId);
+      }
     })();
 
     peaksInFlightRef.current.set(inFlightKey, promise);
@@ -217,13 +245,22 @@ export default function App() {
     if (!buffer) return;
 
     // 波形取得はトリガーのレイテンシに影響させない: キャッシュ済みなら即反映、無ければバックグラウンドで計算して後から反映する。
+    // 計算が失敗・タイムアウトしても再生自体は待たせず、波形パネルには「失敗」とだけ表示する。
     const groupId = currentGroup.id;
     const fileName = slot.fileName;
     const cachedPeaks = peaksRef.current.get(groupId)?.get(fileName) ?? null;
-    setWaveformSlot({ key, peaks: cachedPeaks, duration: buffer.duration, label: slot.label });
+    setWaveformSlot({
+      key,
+      status: cachedPeaks ? "ready" : "computing",
+      peaks: cachedPeaks,
+      duration: buffer.duration,
+      label: slot.label,
+    });
     if (!cachedPeaks) {
       void getOrComputePeaks(groupId, fileName, buffer).then((peaks) => {
-        setWaveformSlot((prev) => (prev && prev.key === key ? { ...prev, peaks } : prev));
+        setWaveformSlot((prev) =>
+          prev && prev.key === key ? { ...prev, peaks, status: peaks ? "ready" : "failed" } : prev,
+        );
       });
     }
 
@@ -450,6 +487,7 @@ export default function App() {
         peaks={waveformSlot?.peaks ?? null}
         duration={waveformSlot?.duration ?? 0}
         label={waveformSlot?.label ?? ""}
+        status={waveformSlot?.status ?? "idle"}
         playbackState={(waveformSlot && runtimeByKey.get(waveformSlot.key)?.state) || "idle"}
       />
 
