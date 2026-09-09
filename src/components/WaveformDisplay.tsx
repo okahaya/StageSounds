@@ -6,7 +6,8 @@ import type { KeyCode, PlaybackState } from "../types";
 interface WaveformDisplayProps {
   audioManager: AudioManager;
   slotKey: KeyCode | null;
-  buffer: AudioBuffer | null;
+  peaks: Float32Array | null;
+  duration: number;
   label: string;
   playbackState: PlaybackState;
 }
@@ -21,39 +22,29 @@ function formatTime(seconds: number): string {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
-/** buffer の波形を、キャンバス幅ぶんのピーク(min/max)列に間引く。 */
-function computePeaks(buffer: AudioBuffer, width: number): Float32Array {
-  const channelCount = buffer.numberOfChannels;
-  const length = buffer.length;
-  const samplesPerPixel = Math.max(1, Math.floor(length / width));
-  const peaks = new Float32Array(width * 2);
-
+/** 事前計算済みのピーク列(固定解像度)を、キャンバス幅ぶんに間引いて描画する。生PCMは走査しない。 */
+function drawPeaks(ctx: CanvasRenderingContext2D, peaks: Float32Array, width: number, height: number): void {
+  const resolution = peaks.length / 2;
+  const mid = height / 2;
+  ctx.fillStyle = WAVEFORM_COLOR;
   for (let x = 0; x < width; x++) {
-    const start = x * samplesPerPixel;
-    const end = Math.min(start + samplesPerPixel, length);
-    let min = 0;
-    let max = 0;
-    for (let ch = 0; ch < channelCount; ch++) {
-      const data = buffer.getChannelData(ch);
-      for (let i = start; i < end; i++) {
-        const v = data[i];
-        if (v < min) min = v;
-        if (v > max) max = v;
-      }
-    }
-    peaks[x * 2] = min;
-    peaks[x * 2 + 1] = max;
+    const bucket = Math.min(resolution - 1, Math.floor((x / width) * resolution));
+    const min = peaks[bucket * 2];
+    const max = peaks[bucket * 2 + 1];
+    const y1 = mid + min * mid;
+    const y2 = mid + max * mid;
+    ctx.fillRect(x, Math.min(y1, y2), 1, Math.max(1, Math.abs(y2 - y1)));
   }
-  return peaks;
 }
 
-export function WaveformDisplay({ audioManager, slotKey, buffer, label, playbackState }: WaveformDisplayProps) {
+export function WaveformDisplay({ audioManager, slotKey, peaks, duration, label, playbackState }: WaveformDisplayProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [currentTime, setCurrentTime] = useState(0);
   const isPlaying = playbackState === "playing" || playbackState === "fading-out";
 
-  // 波形の描画(バッファまたはキャンバスサイズが変わった時のみ)
+  // 波形の描画(ピーク列またはキャンバスサイズが変わった時のみ)。
+  // ピークは読み込み時に一度だけ計算済みのものを使い回すため、ここでは間引き描画のみ行う(軽量)。
   useEffect(() => {
     const canvas = canvasRef.current;
     const container = containerRef.current;
@@ -76,25 +67,15 @@ export function WaveformDisplay({ audioManager, slotKey, buffer, label, playback
       ctx.scale(dpr, dpr);
       ctx.clearRect(0, 0, width, height);
 
-      if (!buffer) return;
-
-      const mid = height / 2;
-      const peaks = computePeaks(buffer, Math.max(1, Math.floor(width)));
-      ctx.fillStyle = WAVEFORM_COLOR;
-      for (let x = 0; x < peaks.length / 2; x++) {
-        const min = peaks[x * 2];
-        const max = peaks[x * 2 + 1];
-        const y1 = mid + min * mid;
-        const y2 = mid + max * mid;
-        ctx.fillRect(x, Math.min(y1, y2), 1, Math.max(1, Math.abs(y2 - y1)));
-      }
+      if (!peaks || peaks.length < 2) return;
+      drawPeaks(ctx, peaks, Math.max(1, Math.floor(width)), height);
     }
 
     draw();
     const resizeObserver = new ResizeObserver(draw);
     resizeObserver.observe(container);
     return () => resizeObserver.disconnect();
-  }, [buffer]);
+  }, [peaks]);
 
   // 再生ヘッド(現在位置)の更新
   useEffect(() => {
@@ -112,15 +93,15 @@ export function WaveformDisplay({ audioManager, slotKey, buffer, label, playback
     return () => cancelAnimationFrame(raf);
   }, [audioManager, slotKey, isPlaying]);
 
-  const duration = buffer?.duration ?? 0;
   const progressRatio = duration > 0 ? Math.min(currentTime / duration, 1) : 0;
+  const hasWaveform = !!peaks && peaks.length >= 2;
 
   return (
     <div className="border-t border-stage-border bg-stage-surface2 px-4 py-2">
       <div className="mb-1 flex items-center justify-between font-mono text-[11px] uppercase tracking-wide text-stage-muted">
         <span className="flex items-center gap-1.5 truncate">
           <AudioWaveform size={12} />
-          {buffer ? label : "波形表示"}
+          {hasWaveform ? label : "波形表示"}
         </span>
         <span className="tabular-nums text-white">
           {formatTime(currentTime)} / {formatTime(duration)}
@@ -128,13 +109,13 @@ export function WaveformDisplay({ audioManager, slotKey, buffer, label, playback
       </div>
       <div ref={containerRef} className="relative h-16 w-full overflow-hidden rounded-sm border border-stage-border bg-stage-bg">
         <canvas ref={canvasRef} className="absolute inset-0 h-full w-full" />
-        {buffer && (
+        {hasWaveform && (
           <div
             className="pointer-events-none absolute inset-y-0 w-px"
             style={{ left: `${progressRatio * 100}%`, backgroundColor: PLAYHEAD_COLOR }}
           />
         )}
-        {!buffer && (
+        {!hasWaveform && (
           <div className="absolute inset-0 flex items-center justify-center font-mono text-[11px] text-stage-muted">
             音源を再生すると波形が表示されます
           </div>
