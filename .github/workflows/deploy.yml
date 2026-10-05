@@ -3,7 +3,12 @@ name: GitHub Pagesへのデプロイ（Web版）
 on:
   push:
     branches: [main]
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      force_deploy:
+        description: "DEPLOY_FREEZE 中でも強制的にデプロイする"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -14,9 +19,15 @@ concurrency:
   group: pages
   cancel-in-progress: true
 
+# 本番期間中のデプロイ凍結:
+#   リポジトリの Settings → Secrets and variables → Actions → Variables に
+#   DEPLOY_FREEZE = true を設定すると、main への push があっても公開版は更新されない。
+#   （緊急で修正版を出す場合は、Actions 画面から手動実行し force_deploy にチェックを入れる）
 jobs:
   build:
+    if: vars.DEPLOY_FREEZE != 'true' || inputs.force_deploy
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -31,6 +42,13 @@ jobs:
       - name: Build web版
         run: npm run build
 
+      - name: ビルド成果物の健全性チェック
+        run: |
+          test -s dist/index.html
+          test -s dist/sw.js
+          test -s dist/manifest.webmanifest
+          ls dist/assets/*.js > /dev/null
+
       - name: Pages用の設定
         uses: actions/configure-pages@v5
 
@@ -42,6 +60,7 @@ jobs:
   deploy:
     needs: build
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
