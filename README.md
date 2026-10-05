@@ -16,7 +16,12 @@ React + TypeScript + Vite + Tailwind CSS + Web Audio API で構築されたブ�
    Mac: ダウンロードした `.zip` を解凍し、中の `StageSounds.app` をダブルクリックで起動
    （「開発元が未確認」と表示されたら、アプリを右クリック→「開く」を選択）
 
-これで完了です。以下はアプリを改造したい人（開発者）向けの説明です。
+これで完了です。
+
+**⚠ 本番で使う前に必ず [リスク管理・障害対応マニュアル](docs/RISK_MANAGEMENT.md) を読んでください。**
+（前日・当日のチェックリスト、本番中の操作、トラブル時の対応手順をまとめています）
+
+以下はアプリを改造したい人（開発者）向けの説明です。
 
 ## セットアップ（開発者向け）
 
@@ -27,9 +32,11 @@ npm run build     # 型チェック + 本番ビルド (dist/ に出力)
 npm run preview   # ビルド成果物のローカルプレビュー
 ```
 
-Node.js 18 以上を推奨。ビルド後の `dist/` は静的ファイル一式なので、USBメモリ内のフォルダや
-社内サーバ、GitHub Pages 等どこにでも配置してそのまま配布・実行できる（`vite.config.ts` で
-`base: "./"` を指定し相対パス参照にしているため）。
+Node.js 18 以上を推奨。ビルド後の `dist/` は静的ファイル一式なので、社内サーバや GitHub Pages 等
+どこにでも配置して配布できる（`vite.config.ts` で `base: "./"` を指定し相対パス参照にしているため）。
+ただし ES モジュールと Service Worker を使うため、`dist/index.html` をダブルクリック（`file://`）で
+開いても動作しない。USB メモリ等で持ち運ぶ場合はデスクトップ版（Tauri）を使うか、
+`npx serve dist` などでローカル HTTP サーバー経由で開くこと。
 
 ## ディレクトリ構成
 
@@ -50,6 +57,9 @@ StageSounds/
     ├── storage/
     │   ├── db.ts                    # idb (IndexedDB) ラッパー。団体・スロット・音声Blobの永続化
     │   └── PresetStorageService.ts  # JSZip による .stagepack の書き出し/読み込み
+    ├── safety/
+    │   ├── globalGuards.ts          # React外で常時動く安全装置（緊急停止キー・誤操作ガード・スリープ防止・多重起動検知）
+    │   └── pwaUpdate.ts             # オフラインキャッシュの登録と、本番中に勝手に更新しない更新管理
     ├── components/
     │   ├── Header.tsx               # 団体切替・編集/プレイモード切替・書き出し/読み込み・PANIC STOP
     │   ├── SlotGrid.tsx              # キーボード配列に模したパッドグリッド
@@ -74,6 +84,10 @@ StageSounds/
   で滑らかに音量変化させる。
 - **ループ再生**: スロットごとに ON/OFF。
 - **緊急停止 (PANIC STOP)**: Space / Esc キー、または画面下部の帯状 PANIC STOP バーで即座に無音化。
+  フェードアウト中の音も含めて止める。Esc はモーダル表示中・入力中・エラー画面でも常に有効。
+- **本番向けの安全装置**: 誤操作になりやすいブラウザショートカットの無効化、スリープ防止、多重起動検知、
+  フォーカス喪失警告、音源の読込失敗表示、オーディオ出力の再起動などを備える。画面下部のステータスバーで
+  状態を常時確認できる。詳細は [docs/RISK_MANAGEMENT.md](docs/RISK_MANAGEMENT.md)。
 - **編集 / 編集完了**: 編集中のみスロット設定・ドラッグ&ドロップ割当・団体作成/削除が可能。誤操作を防止する。
 - **団体プリセットの共有**: `.stagepack`（ZIP）として団体名・キー割当・フェード・ループ設定と音声実体
   をひとまとめに書き出し／読み込み。アーカイブ内は `manifest.json` + `audio/` の相対参照のみで完結する
@@ -95,7 +109,11 @@ Vite の開発サーバー / `dist` ビルドと連携する形で Tauri (v2) �
 **通常はビルドを手動で行う必要はありません。** `main` ブランチを更新するたびに GitHub Actions
 （[.github/workflows/release.yml](.github/workflows/release.yml)）が自動でWindows用 `.exe` と
 macOS用 `.app` をビルドし、[Releases](https://github.com/okahaya/StageSounds/releases/latest)
-ページに公開します。実行委員はそこからダウンロードするだけで済みます。
+ページに `build-<番号>` として公開します（過去のビルドも残るので、問題があれば一つ前に戻せます）。
+実行委員はそこからダウンロードするだけで済みます。
+
+本番期間中はリポジトリ変数 `DEPLOY_FREEZE=true` を設定すると、GitHub Pages・Releases の自動更新を
+止められます（手順は [docs/RISK_MANAGEMENT.md](docs/RISK_MANAGEMENT.md) の「デプロイ凍結手順」）。
 
 以下は自分の手元で直接ビルドしたい開発者向けの手順です。
 

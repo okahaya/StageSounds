@@ -41,4 +41,6 @@ export interface SlotRuntimeState {
   state: PlaybackState;
   hasAudio: boolean;
   isDecoding: boolean;
+  /** 音源が割り当てられているのに再生できない理由(保存データ消失・デコード失敗など)。正常時は undefined。 */
+  loadError?: string;
 }

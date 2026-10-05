@@ -1,9 +1,47 @@
 import JSZip from "jszip";
 import { peaksFromJson, peaksToJson } from "../audio/waveformPeaks";
+import { createDefaultSlots } from "../utils/keys";
 import type { GroupProfile, ManifestV1, SlotConfig } from "../types";
 
 const MANIFEST_FILENAME = "manifest.json";
 const AUDIO_DIR = "audio";
+const MAX_FADE_SECONDS = 5;
+const MAX_LABEL_LENGTH = 100;
+
+function sanitizeFade(value: unknown): number {
+  const n = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(n) ? Math.min(Math.max(n, 0), MAX_FADE_SECONDS) : 0;
+}
+
+/** ディレクトリ区切りや制御文字を含む不正なファイル名を拒否する(パス・トラバーサル対策)。 */
+function sanitizeFileName(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const name = value.trim();
+  if (!name || name.length > 255 || /[\\/\u0000-\u001f]/.test(name) || name === "." || name === "..") return null;
+  return name;
+}
+
+/**
+ * manifest 内のスロット定義を検証・正規化する。壊れた値や手で編集された manifest でも、
+ * 再生時に例外(NaN のフェード秒数など)が出ないことを保証し、既定のキー配列に揃える。
+ */
+function sanitizeSlots(raw: unknown[]): SlotConfig[] {
+  const byKey = new Map<string, SlotConfig>();
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const s = item as Record<string, unknown>;
+    if (typeof s.key !== "string") continue;
+    byKey.set(s.key, {
+      key: s.key,
+      label: typeof s.label === "string" ? s.label.slice(0, MAX_LABEL_LENGTH) : "未設定",
+      fileName: sanitizeFileName(s.fileName),
+      fadeIn: sanitizeFade(s.fadeIn),
+      fadeOut: sanitizeFade(s.fadeOut),
+      loop: s.loop === true,
+    });
+  }
+  return createDefaultSlots().map((d) => byKey.get(d.key) ?? d);
+}
 
 export interface ImportedGroup {
   profile: GroupProfile;
@@ -11,6 +49,8 @@ export interface ImportedGroup {
   audioBlobs: Map<string, Blob>;
   /** ファイル名 -> 波形ピーク配列。manifest に含まれていた場合のみ。呼び出し側でキャッシュ・永続化する。 */
   waveforms: Map<string, Float32Array>;
+  /** manifest で参照されているがアーカイブ内に実体が無かった音源ファイル名。 */
+  missingFiles: string[];
 }
 
 /**
@@ -34,7 +74,9 @@ export class PresetStorageService {
       seenFiles.add(slot.fileName);
       const blob = await resolveAudioBlob(slot.fileName);
       if (blob) {
-        audioFolder.file(slot.fileName, blob);
+        // 音源は既に圧縮済み形式が多く、再圧縮は時間がかかる割に縮まない。
+        // 大きな団体の書き出しで画面が固まらないよう無圧縮で格納する。
+        audioFolder.file(slot.fileName, blob, { compression: "STORE" });
       }
       const peaks = await resolveWaveformPeaks?.(slot.fileName);
       if (peaks) {
@@ -80,44 +122,44 @@ export class PresetStorageService {
       throw new Error("manifest.json が見つかりません。有効な .stagepack / .zip ファイルではありません。");
     }
     const manifestText = await manifestEntry.async("string");
-    const manifest = JSON.parse(manifestText) as ManifestV1;
+    let manifest: ManifestV1;
+    try {
+      manifest = JSON.parse(manifestText) as ManifestV1;
+    } catch {
+      throw new Error("manifest.json が壊れています（JSONとして読めません）。");
+    }
 
-    if (!manifest.version || !Array.isArray(manifest.slots)) {
+    if (!manifest || !manifest.version || !Array.isArray(manifest.slots)) {
       throw new Error("manifest.json の形式が不正です。");
     }
 
+    const slots = sanitizeSlots(manifest.slots);
     const audioBlobs = new Map<string, Blob>();
     const waveforms = new Map<string, Float32Array>();
-    for (const slot of manifest.slots) {
-      if (!slot.fileName) continue;
+    const missingFiles: string[] = [];
+    for (const slot of slots) {
+      if (!slot.fileName || audioBlobs.has(slot.fileName)) continue;
       const entry = zip.file(`${AUDIO_DIR}/${slot.fileName}`);
       if (entry) {
         const blob = await entry.async("blob");
         audioBlobs.set(slot.fileName, blob);
+      } else {
+        missingFiles.push(slot.fileName);
       }
       const peaks = manifest.waveforms?.[slot.fileName];
-      if (peaks) {
+      if (Array.isArray(peaks) && peaks.length >= 2 && peaks.every((v) => typeof v === "number")) {
         waveforms.set(slot.fileName, peaksFromJson(peaks));
       }
     }
 
-    const slots: SlotConfig[] = manifest.slots.map((s) => ({
-      key: s.key,
-      label: s.label,
-      fileName: s.fileName,
-      fadeIn: s.fadeIn ?? 0,
-      fadeOut: s.fadeOut ?? 0,
-      loop: s.loop ?? false,
-    }));
-
     const profile: GroupProfile = {
       id: newId,
-      groupName: manifest.groupName || "無題の団体",
-      updatedAt: manifest.updatedAt || new Date().toISOString(),
+      groupName: (typeof manifest.groupName === "string" && manifest.groupName.slice(0, MAX_LABEL_LENGTH)) || "無題の団体",
+      updatedAt: typeof manifest.updatedAt === "string" ? manifest.updatedAt : new Date().toISOString(),
       slots,
     };
 
-    return { profile, audioBlobs, waveforms };
+    return { profile, audioBlobs, waveforms, missingFiles };
   }
 }
 

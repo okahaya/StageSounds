@@ -27,9 +27,21 @@ const DB_VERSION = 2;
 
 let dbPromise: Promise<IDBPDatabase<StageSoundsDB>> | null = null;
 
+/**
+ * IndexedDB 接続を取得する。接続が切れた場合(ストレージ削除・ブラウザ側の強制切断・
+ * 他タブでのバージョン更新など)や接続に失敗した場合は、次回呼び出し時に再接続を試みる。
+ */
 function getDb(): Promise<IDBPDatabase<StageSoundsDB>> {
   if (!dbPromise) {
-    dbPromise = openDB<StageSoundsDB>(DB_NAME, DB_VERSION, {
+    const opening = openDB<StageSoundsDB>(DB_NAME, DB_VERSION, {
+      blocking() {
+        // 他タブが新しいバージョンで開こうとしている: こちらの接続を閉じて譲る。
+        void opening.then((db) => db.close());
+        dbPromise = null;
+      },
+      terminated() {
+        dbPromise = null;
+      },
       upgrade(db) {
         if (!db.objectStoreNames.contains("groups")) {
           db.createObjectStore("groups", { keyPath: "id" });
@@ -44,6 +56,10 @@ function getDb(): Promise<IDBPDatabase<StageSoundsDB>> {
           db.createObjectStore("waveforms");
         }
       },
+    });
+    dbPromise = opening;
+    opening.catch(() => {
+      if (dbPromise === opening) dbPromise = null;
     });
   }
   return dbPromise;
@@ -133,6 +149,17 @@ export async function deleteWaveformPeaks(groupId: string, fileName: string): Pr
 export async function getLastActiveGroupId(): Promise<string | undefined> {
   const db = await getDb();
   return db.get("meta", "lastActiveGroupId");
+}
+
+/** ストレージの永続化状況と使用量。永続化されていないと、容量逼迫時にブラウザが音源を消すことがある。 */
+export async function getStorageStatus(): Promise<{ persisted: boolean | null; usage: number | null; quota: number | null }> {
+  const storage = navigator.storage;
+  if (!storage) return { persisted: null, usage: null, quota: null };
+  const [persisted, estimate] = await Promise.all([
+    storage.persisted?.().catch(() => null) ?? null,
+    storage.estimate?.().catch(() => null) ?? null,
+  ]);
+  return { persisted, usage: estimate?.usage ?? null, quota: estimate?.quota ?? null };
 }
 
 export async function setLastActiveGroupId(groupId: string): Promise<void> {

@@ -3,14 +3,26 @@ name: デスクトップアプリ自動ビルド・リリース
 on:
   push:
     branches: [main]
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      force_release:
+        description: "DEPLOY_FREEZE 中でも強制的にリリースする"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
 
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+# DEPLOY_FREEZE = true (リポジトリ変数) の間は、main への push でリリースを差し替えない。
 jobs:
   build-windows:
+    if: vars.DEPLOY_FREEZE != 'true' || inputs.force_release
     runs-on: windows-latest
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
 
@@ -44,7 +56,9 @@ jobs:
           path: dist-desktop/StageSounds-Windows.exe
 
   build-macos:
+    if: vars.DEPLOY_FREEZE != 'true' || inputs.force_release
     runs-on: macos-latest
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
 
@@ -81,6 +95,7 @@ jobs:
   release:
     needs: [build-windows, build-macos]
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -92,19 +107,18 @@ jobs:
           name: macos-build
           path: dist-desktop
 
-      - name: 既存の latest リリースを削除（あれば）
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh release delete latest --yes --cleanup-tag --repo ${{ github.repository }} || true
-
+      # ビルドごとに別タグ(build-<番号>)の固定リリースを作る。
+      # 以前は latest を削除→再作成していたため、その間ダウンロードリンクが切れる・
+      # 壊れたビルドを出すと前のビルドに戻せない、という問題があった。
+      # 過去のビルドはすべて Releases に残るので、問題があれば一つ前のものをダウンロードすればよい。
       - name: リリースを公開
         uses: softprops/action-gh-release@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: latest
-          name: 最新ビルド (Latest Build)
+          tag_name: build-${{ github.run_number }}
+          target_commitish: ${{ github.sha }}
+          name: ビルド ${{ github.run_number }} (${{ github.sha }})
           make_latest: true
           body: |
             ## ダウンロード方法
@@ -113,7 +127,16 @@ jobs:
             - **Mac**: `StageSounds-macOS.zip` をダウンロードして解凍し、中の `StageSounds.app` をダブルクリックで起動してください。
               - 初回起動時に「開発元が未確認のため開けません」と表示された場合は、アプリを右クリック（または Control+クリック）して「開く」を選んでください。
 
-            このリリースは main ブランチが更新されるたびに自動的に最新の内容に更新されます。
+            このリリースは main ブランチが更新されるたびに自動的に作成されます。
+            新しいビルドで問題が起きた場合は、Releases 一覧から一つ前のビルドをダウンロードしてください。
           files: |
             dist-desktop/StageSounds-Windows.exe
             dist-desktop/StageSounds-macOS.zip
+
+      # 旧方式の latest タグのリリースが残っていると古いビルドを掴む人が出るため、
+      # 新しいリリースの公開に成功した「後」で削除する(ダウンロード不能な時間を作らない)。
+      - name: 旧方式の latest リリースを削除（あれば）
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release delete latest --yes --cleanup-tag --repo ${{ github.repository }} || true

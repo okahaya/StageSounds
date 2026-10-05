@@ -13,6 +13,8 @@ interface HeaderProps {
   onToggleEditMode: () => void;
   onExport: () => void;
   onImportFile: (file: File) => void;
+  /** 再生中は団体切替を禁止する(誤操作で本番中の音が止まるのを防ぐ)。 */
+  groupSwitchLocked: boolean;
 }
 
 const btn =
@@ -29,6 +31,7 @@ export function Header({
   onToggleEditMode,
   onExport,
   onImportFile,
+  groupSwitchLocked,
 }: HeaderProps) {
   const importInputRef = useRef<HTMLInputElement>(null);
 
@@ -72,8 +75,14 @@ export function Header({
       <div className="flex items-center justify-end gap-2">
         <select
           value={currentGroup?.id ?? ""}
-          onChange={(e) => onSwitchGroup(e.target.value)}
-          className="rounded-sm border border-stage-border bg-stage-surface2 px-2 py-1.5 text-xs text-white outline-none focus:border-white"
+          onChange={(e) => {
+            onSwitchGroup(e.target.value);
+            // フォーカスが残ると、以後のキー入力でセレクトの選択が変わってしまうため外す。
+            e.target.blur();
+          }}
+          disabled={groupSwitchLocked}
+          title={groupSwitchLocked ? "再生中は団体を切り替えられません（停止してから切り替えてください）" : "団体を切り替え"}
+          className="rounded-sm disabled:opacity-40 border border-stage-border bg-stage-surface2 px-2 py-1.5 text-xs text-white outline-none focus:border-white"
         >
           {groups.length === 0 && <option value="">団体なし</option>}
           {groups.map((g) => (
