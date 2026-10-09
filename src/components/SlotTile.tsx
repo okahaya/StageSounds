@@ -35,8 +35,11 @@ export function SlotTile({ entry, slot, runtime, editMode, onActivate, onOpenEdi
           ? "bg-stage-fading"
           : "bg-transparent";
 
-  const borderClass =
-    state === "playing"
+  const loadError = runtime.loadError;
+
+  const borderClass = loadError
+    ? "border-stage-danger"
+    : state === "playing"
       ? "border-stage-playing"
       : state === "fading-out" || state === "paused"
         ? "border-stage-fading"
@@ -87,7 +90,7 @@ export function SlotTile({ entry, slot, runtime, editMode, onActivate, onOpenEdi
       onDragLeave={() => setDragOver(false)}
       onDrop={handleDrop}
       className={`no-select relative flex h-28 w-28 shrink-0 cursor-pointer flex-col justify-between rounded-sm border ${borderClass} ${bgClass} ${bevelClass} p-2`}
-      title={slot.fileName ?? undefined}
+      title={loadError ? `${loadError}: ${slot.fileName}（編集で音源を割り当て直してください）` : (slot.fileName ?? undefined)}
     >
       <div className={`absolute inset-x-0 top-0 h-[3px] rounded-t-sm ${ledClass}`} />
 
@@ -96,7 +99,11 @@ export function SlotTile({ entry, slot, runtime, editMode, onActivate, onOpenEdi
       </div>
 
       <div className="flex flex-1 items-center overflow-hidden py-1">
-        {hasAudio && <span className="line-clamp-2 text-xs font-medium leading-tight text-white">{slot.label}</span>}
+        {(hasAudio || loadError) && (
+          <span className={`line-clamp-2 text-xs font-medium leading-tight ${loadError ? "text-stage-danger" : "text-white"}`}>
+            {slot.label}
+          </span>
+        )}
       </div>
 
       <div className="flex flex-wrap items-center gap-1 font-mono text-[9px] uppercase tracking-wide text-stage-muted">
@@ -125,6 +132,7 @@ export function SlotTile({ entry, slot, runtime, editMode, onActivate, onOpenEdi
         )}
         {state === "paused" && <span className="text-stage-fading">一時停止</span>}
         {runtime.isDecoding && <span className="text-stage-fading">読込中</span>}
+        {loadError && <span className="font-bold text-stage-danger">読込失敗</span>}
       </div>
     </div>
   );

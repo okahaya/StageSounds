@@ -33,7 +33,7 @@ export function SlotEditorModal({ slot, onClose, onSave, onAssignFile, onRemoveF
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4" onClick={commitAndClose}>
+    <div data-modal-open className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4" onClick={commitAndClose}>
       <div
         className="w-full max-w-md rounded-sm border border-stage-border bg-stage-surface p-5"
         onClick={(e) => e.stopPropagation()}

@@ -6,7 +6,10 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      registerType: "autoUpdate",
+      // 本番中に新バージョンへ勝手に切り替わらないよう、更新は必ずオペレーターの操作で適用する
+      // (src/safety/pwaUpdate.ts)。登録もそちらで行うため自動挿入はしない。
+      registerType: "prompt",
+      injectRegister: false,
       includeAssets: ["apple-touch-icon.png"],
       manifest: {
         name: "StageSounds",
@@ -40,6 +43,7 @@ export default defineConfig({
         // ステージ現場での完全オフライン起動のため、ビルド成果物一式を Service Worker に
         // プリキャッシュする（ネットワーク遮断下での F5 リロード・ブラウザ再起動に対応）。
         globPatterns: ["**/*.{js,css,html,svg,png,ico,woff,woff2,ttf,eot,webmanifest,json}"],
+        cleanupOutdatedCaches: true,
       },
     }),
   ],

@@ -1,0 +1,35 @@
+name: CI（ビルド検証）
+
+# main に取り込む前に、型エラー・ビルドエラーが無いことを確認する。
+# 壊れた変更が main に入ると、そのまま GitHub Pages / Releases に公開されてしまうため。
+on:
+  pull_request:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: 型チェック + ビルド
+        run: npm run build
+
+      - name: ビルド成果物の健全性チェック
+        run: |
+          test -s dist/index.html
+          test -s dist/sw.js
+          test -s dist/manifest.webmanifest
+          ls dist/assets/*.js > /dev/null

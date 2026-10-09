@@ -8,18 +8,22 @@ export interface PlaybackOptions {
 
 export interface AudioManagerEventMap {
   statechange: CustomEvent<{ slotKey: KeyCode | null; state: PlaybackState }>;
+  contextstatechange: CustomEvent<{ state: AudioContextState | "interrupted" }>;
 }
 
 /** 極短時間のリニアフェード。ハードストップ時のクリックノイズ(プチッ音)を避けるための下限値。 */
 const DECLICK_SECONDS = 0.015;
 /** gain の指数ランプは 0 を許容しないため、実質無音とみなす下限値。 */
 const MIN_GAIN = 0.0001;
+/** フェード秒数の上限。壊れた設定値(NaN/負数/巨大値)で Web Audio が例外を投げるのを防ぐ。 */
+const MAX_FADE_SECONDS = 30;
+/** resume() が応答しない場合(出力デバイス消失など)に、待たずに先へ進むまでの時間。 */
+const RESUME_TIMEOUT_MS = 300;
 
 interface ActivePlayback {
   slotKey: KeyCode;
   source: AudioBufferSourceNode;
   gain: GainNode;
-  fadeOut: number;
   /** 手動 stop() 済みで onended による二重クリアを無視すべきか */
   stopping: boolean;
   /** 再生位置 0 秒に相当する AudioContext.currentTime。経過時間の算出に使う(途中再開時は過去に遡った値)。 */
@@ -36,30 +40,70 @@ interface PausedPlayback {
   offset: number;
 }
 
+function sanitizeFade(seconds: number): number {
+  return Number.isFinite(seconds) ? Math.min(Math.max(seconds, 0), MAX_FADE_SECONDS) : 0;
+}
+
 /**
  * Web Audio API を用いた単一再生（排他制御）のオーディオエンジン。
  * 音声はあらかじめ AudioBuffer にデコードしてメモリ保持し、trigger 時のレイテンシを最小化する。
- * 常に高々ひとつの再生系統(ActivePlayback)しか保持しない = 同時再生をハード制約として防止する。
+ * 「主」となる再生系統(active)は常に高々ひとつ。フェードアウト中の系統は sounding に残り、
+ * PANIC STOP ではそれらも含めて鳴っている音をすべて即座に止める。
+ *
+ * アプリ全体でただ1つのインスタンス(audioManager)を共有する。React の再マウントや
+ * エラー画面からでも同じ音を止められるようにするため、また AudioContext の多重生成
+ * (=音声スレッドの多重起動・リソースリーク)を防ぐため。
  */
 export class AudioManager extends EventTarget {
   private ctx: AudioContext;
   private active: ActivePlayback | null = null;
+  /** フェードアウト中を含め、現在音を出している可能性のある全系統。 */
+  private sounding = new Set<ActivePlayback>();
   private paused: PausedPlayback | null = null;
 
   constructor() {
     super();
-    this.ctx = new AudioContext({ latencyHint: "interactive" });
+    this.ctx = this.createContext();
+  }
+
+  private createContext(): AudioContext {
+    const ctx = new AudioContext({ latencyHint: "interactive" });
+    ctx.addEventListener("statechange", () => {
+      if (ctx === this.ctx) this.emitContextState();
+    });
+    return ctx;
   }
 
   get audioContext(): AudioContext {
     return this.ctx;
   }
 
-  /** ブラウザの自動再生ポリシー対策。ユーザー操作イベント内で呼ぶこと。 */
+  /** AudioContext の状態。Safari は非標準の "interrupted" を返すことがある。 */
+  get contextState(): AudioContextState | "interrupted" {
+    return this.ctx.state as AudioContextState | "interrupted";
+  }
+
+  /** ブラウザの自動再生ポリシー対策。ユーザー操作イベント内で呼ぶこと。応答しない場合も一定時間で戻る。 */
   async resume(): Promise<void> {
-    if (this.ctx.state === "suspended") {
-      await this.ctx.resume();
-    }
+    if (this.ctx.state === "running") return;
+    await Promise.race([
+      this.ctx.resume().catch((err) => console.warn("AudioContext.resume 失敗", err)),
+      new Promise<void>((resolve) => setTimeout(resolve, RESUME_TIMEOUT_MS)),
+    ]);
+  }
+
+  /**
+   * オーディオ出力の作り直し。出力デバイスの抜き差し・スリープ復帰などで AudioContext が
+   * 復帰しなくなった場合の最終手段。デコード済み AudioBuffer は別の AudioContext でも
+   * そのまま再利用できるため、音源の再読み込みは不要。
+   */
+  async restartContext(): Promise<void> {
+    this.panicStop();
+    const old = this.ctx;
+    this.ctx = this.createContext();
+    void old.close().catch(() => {});
+    await this.resume();
+    this.emitContextState();
   }
 
   async decode(data: ArrayBuffer): Promise<AudioBuffer> {
@@ -92,7 +136,7 @@ export class AudioManager extends EventTarget {
   trigger(slotKey: KeyCode, buffer: AudioBuffer, options: PlaybackOptions): void {
     this.clearPaused();
     if (this.active && this.active.slotKey === slotKey) {
-      this.stopActive(this.active, options.fadeOut);
+      this.stopActive(this.active, sanitizeFade(options.fadeOut));
       return;
     }
     if (this.active) {
@@ -120,6 +164,7 @@ export class AudioManager extends EventTarget {
     if (!buffer) return;
     const offset = this.getPlaybackTime(playback.slotKey) ?? 0;
     this.active = null;
+    this.sounding.delete(playback);
     this.hardSilence(playback);
     this.paused = { slotKey: playback.slotKey, buffer, options: playback.options, offset };
     this.emitState(playback.slotKey, "paused");
@@ -131,18 +176,23 @@ export class AudioManager extends EventTarget {
       this.clearPaused();
     }
     if (this.active && this.active.slotKey === slotKey) {
-      this.stopActive(this.active, fadeOut);
+      this.stopActive(this.active, sanitizeFade(fadeOut));
     }
   }
 
-  /** 緊急停止(PANIC STOP)。フェードを待たず即座に無音化する安全弁。一時停止中の音源も破棄する。 */
+  /** 緊急停止(PANIC STOP)。フェードアウト中のものも含め、鳴っている音をすべて即座に無音化する安全弁。一時停止中の音源も破棄する。 */
   panicStop(): void {
     this.clearPaused();
-    if (!this.active) return;
-    const playback = this.active;
+    const playbacks = Array.from(this.sounding);
+    const activeKey = this.active?.slotKey ?? null;
     this.active = null;
-    this.hardSilence(playback);
-    this.emitState(playback.slotKey, "idle");
+    this.sounding.clear();
+    for (const playback of playbacks) {
+      this.hardSilence(playback);
+    }
+    const keys = new Set(playbacks.map((p) => p.slotKey));
+    if (activeKey) keys.add(activeKey);
+    for (const key of keys) this.emitState(key, "idle");
   }
 
   private clearPaused(): void {
@@ -162,7 +212,7 @@ export class AudioManager extends EventTarget {
     source.connect(gain).connect(this.ctx.destination);
 
     const now = this.ctx.currentTime;
-    const fadeIn = offset > 0 ? DECLICK_SECONDS : options.fadeIn;
+    const fadeIn = offset > 0 ? DECLICK_SECONDS : sanitizeFade(options.fadeIn);
     if (fadeIn > 0) {
       gain.gain.setValueAtTime(MIN_GAIN, now);
       gain.gain.linearRampToValueAtTime(1, now + fadeIn);
@@ -174,13 +224,13 @@ export class AudioManager extends EventTarget {
       slotKey,
       source,
       gain,
-      fadeOut: options.fadeOut,
       stopping: false,
       startTime: now - offset,
       options,
     };
 
     source.onended = () => {
+      this.sounding.delete(playback);
       if (this.active === playback) {
         this.active = null;
         this.emitState(slotKey, "idle");
@@ -189,6 +239,7 @@ export class AudioManager extends EventTarget {
 
     source.start(now, offset);
     this.active = playback;
+    this.sounding.add(playback);
     this.emitState(slotKey, "playing");
   }
 
@@ -212,9 +263,12 @@ export class AudioManager extends EventTarget {
         /* すでに停止済み */
       }
       source.onended = () => {
-        this.emitState(slotKey, "idle");
+        this.sounding.delete(playback);
+        // フェードアウト中に同じスロットが再トリガーされた場合、UI を idle に戻してはいけない。
+        if (this.active?.slotKey !== slotKey) this.emitState(slotKey, "idle");
       };
     } else {
+      this.sounding.delete(playback);
       this.hardSilence(playback);
       this.emitState(slotKey, "idle");
     }
@@ -223,6 +277,7 @@ export class AudioManager extends EventTarget {
   private hardSilence(playback: ActivePlayback): void {
     const now = this.ctx.currentTime;
     const { gain, source } = playback;
+    source.onended = null;
     try {
       const currentValue = Math.max(gain.gain.value, MIN_GAIN);
       gain.gain.cancelScheduledValues(now);
@@ -232,7 +287,14 @@ export class AudioManager extends EventTarget {
     } catch {
       /* すでに停止済み、または開始前 */
     }
-    source.onended = null;
+    // AudioContext が停止状態などでスケジュールが効かない場合に備え、少し後に接続自体を切る。
+    setTimeout(() => {
+      try {
+        gain.disconnect();
+      } catch {
+        /* 切断済み */
+      }
+    }, (DECLICK_SECONDS + 0.05) * 1000);
   }
 
   /** 再生状態変化を購読する。戻り値を呼ぶと購読解除される。 */
@@ -242,9 +304,23 @@ export class AudioManager extends EventTarget {
     return () => super.removeEventListener("statechange", handler);
   }
 
+  /** AudioContext の状態変化(suspended / running / interrupted 等)を購読する。 */
+  onContextStateChange(listener: (state: AudioContextState | "interrupted") => void): () => void {
+    const handler = (e: Event) => listener((e as AudioManagerEventMap["contextstatechange"]).detail.state);
+    super.addEventListener("contextstatechange", handler);
+    return () => super.removeEventListener("contextstatechange", handler);
+  }
+
+  private emitContextState(): void {
+    this.dispatchEvent(new CustomEvent("contextstatechange", { detail: { state: this.contextState } }));
+  }
+
   private emitState(slotKey: KeyCode | null, state: PlaybackState): void {
     this.dispatchEvent(
       new CustomEvent("statechange", { detail: { slotKey, state } }) satisfies AudioManagerEventMap["statechange"],
     );
   }
 }
+
+/** アプリ全体で共有する唯一のオーディオエンジン。 */
+export const audioManager = new AudioManager();
