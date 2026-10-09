@@ -79,7 +79,16 @@ export function WaveformDisplay({ audioManager, slotKey, peaks, duration, label,
 
   // 再生ヘッド(現在位置)の更新
   useEffect(() => {
-    if (!isPlaying || !slotKey) {
+    if (!slotKey) {
+      setCurrentTime(0);
+      return;
+    }
+    // 一時停止中は再生ヘッドをその位置で止めて表示し続ける。
+    if (playbackState === "paused") {
+      setCurrentTime(audioManager.getPlaybackTime(slotKey) ?? 0);
+      return;
+    }
+    if (!isPlaying) {
       setCurrentTime(0);
       return;
     }
@@ -91,7 +100,7 @@ export function WaveformDisplay({ audioManager, slotKey, peaks, duration, label,
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [audioManager, slotKey, isPlaying]);
+  }, [audioManager, slotKey, isPlaying, playbackState]);
 
   const progressRatio = duration > 0 ? Math.min(currentTime / duration, 1) : 0;
   const hasWaveform = !!peaks && peaks.length >= 2;

@@ -22,8 +22,18 @@ interface ActivePlayback {
   fadeOut: number;
   /** 手動 stop() 済みで onended による二重クリアを無視すべきか */
   stopping: boolean;
-  /** 再生開始時の AudioContext.currentTime。経過時間の算出に使う。 */
+  /** 再生位置 0 秒に相当する AudioContext.currentTime。経過時間の算出に使う(途中再開時は過去に遡った値)。 */
   startTime: number;
+  options: PlaybackOptions;
+}
+
+/** 一時停止中の再生情報。再開時はこの位置から新しい source を作って鳴らし直す。 */
+interface PausedPlayback {
+  slotKey: KeyCode;
+  buffer: AudioBuffer;
+  options: PlaybackOptions;
+  /** 一時停止した時点の再生位置(秒) */
+  offset: number;
 }
 
 /**
@@ -34,6 +44,7 @@ interface ActivePlayback {
 export class AudioManager extends EventTarget {
   private ctx: AudioContext;
   private active: ActivePlayback | null = null;
+  private paused: PausedPlayback | null = null;
 
   constructor() {
     super();
@@ -60,8 +71,9 @@ export class AudioManager extends EventTarget {
     return this.active?.slotKey ?? null;
   }
 
-  /** 指定スロットが再生中の場合、その経過再生位置(秒)を返す。再生中でなければ null。 */
+  /** 指定スロットが再生中・一時停止中の場合、その再生位置(秒)を返す。どちらでもなければ null。 */
   getPlaybackTime(slotKey: KeyCode): number | null {
+    if (this.paused && this.paused.slotKey === slotKey) return this.paused.offset;
     if (!this.active || this.active.slotKey !== slotKey) return null;
     const { source, startTime } = this.active;
     const buffer = source.buffer;
@@ -75,8 +87,10 @@ export class AudioManager extends EventTarget {
    * - 何も再生していない場合: 再生開始。
    * - 同じスロットが再生中の場合: トグルとして停止(フェードアウト設定を適用)。
    * - 別のスロットが再生中の場合: 直前の音声を素早く止めてから新しい音声を再生開始(排他制御)。
+   * - 一時停止中の場合: 一時停止は破棄し、押されたスロットを先頭から再生開始。
    */
   trigger(slotKey: KeyCode, buffer: AudioBuffer, options: PlaybackOptions): void {
+    this.clearPaused();
     if (this.active && this.active.slotKey === slotKey) {
       this.stopActive(this.active, options.fadeOut);
       return;
@@ -87,15 +101,43 @@ export class AudioManager extends EventTarget {
     this.startPlayback(slotKey, buffer, options);
   }
 
+  /**
+   * 一時停止/再開のトグル。
+   * - 再生中: その位置で一時停止(クリック防止の極短フェードのみ)。
+   * - 一時停止中: 一時停止した位置から再開。
+   * - フェードアウト中・停止中: 何もしない。
+   */
+  togglePause(): void {
+    if (this.paused) {
+      const { slotKey, buffer, options, offset } = this.paused;
+      this.paused = null;
+      this.startPlayback(slotKey, buffer, options, offset);
+      return;
+    }
+    if (!this.active) return;
+    const playback = this.active;
+    const buffer = playback.source.buffer;
+    if (!buffer) return;
+    const offset = this.getPlaybackTime(playback.slotKey) ?? 0;
+    this.active = null;
+    this.hardSilence(playback);
+    this.paused = { slotKey: playback.slotKey, buffer, options: playback.options, offset };
+    this.emitState(playback.slotKey, "paused");
+  }
+
   /** 現在のスロットのみを対象に、外部(タイルのクリック等)から明示的に停止する。 */
   stopSlot(slotKey: KeyCode, fadeOut: number): void {
+    if (this.paused && this.paused.slotKey === slotKey) {
+      this.clearPaused();
+    }
     if (this.active && this.active.slotKey === slotKey) {
       this.stopActive(this.active, fadeOut);
     }
   }
 
-  /** 緊急停止(PANIC STOP)。フェードを待たず即座に無音化する安全弁。 */
+  /** 緊急停止(PANIC STOP)。フェードを待たず即座に無音化する安全弁。一時停止中の音源も破棄する。 */
   panicStop(): void {
+    this.clearPaused();
     if (!this.active) return;
     const playback = this.active;
     this.active = null;
@@ -103,7 +145,15 @@ export class AudioManager extends EventTarget {
     this.emitState(playback.slotKey, "idle");
   }
 
-  private startPlayback(slotKey: KeyCode, buffer: AudioBuffer, options: PlaybackOptions): void {
+  private clearPaused(): void {
+    if (!this.paused) return;
+    const { slotKey } = this.paused;
+    this.paused = null;
+    this.emitState(slotKey, "idle");
+  }
+
+  /** offset > 0 の場合は一時停止からの再開とみなし、フェードインはクリック防止の極短フェードのみにする。 */
+  private startPlayback(slotKey: KeyCode, buffer: AudioBuffer, options: PlaybackOptions, offset = 0): void {
     const source = this.ctx.createBufferSource();
     source.buffer = buffer;
     source.loop = options.loop;
@@ -112,9 +162,10 @@ export class AudioManager extends EventTarget {
     source.connect(gain).connect(this.ctx.destination);
 
     const now = this.ctx.currentTime;
-    if (options.fadeIn > 0) {
+    const fadeIn = offset > 0 ? DECLICK_SECONDS : options.fadeIn;
+    if (fadeIn > 0) {
       gain.gain.setValueAtTime(MIN_GAIN, now);
-      gain.gain.linearRampToValueAtTime(1, now + options.fadeIn);
+      gain.gain.linearRampToValueAtTime(1, now + fadeIn);
     } else {
       gain.gain.setValueAtTime(1, now);
     }
@@ -125,7 +176,8 @@ export class AudioManager extends EventTarget {
       gain,
       fadeOut: options.fadeOut,
       stopping: false,
-      startTime: now,
+      startTime: now - offset,
+      options,
     };
 
     source.onended = () => {
@@ -135,7 +187,7 @@ export class AudioManager extends EventTarget {
       }
     };
 
-    source.start(now);
+    source.start(now, offset);
     this.active = playback;
     this.emitState(slotKey, "playing");
   }

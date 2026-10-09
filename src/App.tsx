@@ -235,6 +235,11 @@ export default function App() {
     audioManagerRef.current.panicStop();
   }
 
+  async function handleTogglePause() {
+    await audioManagerRef.current.resume();
+    audioManagerRef.current.togglePause();
+  }
+
   async function handleAssignFile(key: string, file: File) {
     if (!currentGroup) return;
     const groupId = currentGroup.id;
@@ -364,6 +369,7 @@ export default function App() {
   useKeyboard({
     onTrigger: (code) => void handleActivate(code),
     onPanic: handlePanic,
+    onTogglePause: () => void handleTogglePause(),
     suspended: editingKey !== null,
   });
 
@@ -454,16 +460,16 @@ export default function App() {
       />
 
       <div className="border-t border-stage-border bg-stage-surface px-4 py-1 text-center font-mono text-[11px] uppercase tracking-wide text-stage-muted">
-        {editMode ? "編集中：タイルをクリックして設定、ドラッグ&ドロップで音源割当" : "プレイ中：キー入力またはクリックで再生 / 停止"}
+        {editMode ? "編集中：タイルをクリックして設定、ドラッグ&ドロップで音源割当" : "プレイ中：キー入力またはクリックで再生 / 停止　Space：一時停止 / 再開"}
       </div>
 
       <button
         onClick={handlePanic}
         className="flex h-14 w-full shrink-0 items-center justify-center gap-3 border-t-2 border-red-900 bg-stage-danger text-white shadow-[inset_0_2px_0_rgba(255,255,255,0.15),inset_0_-3px_0_rgba(0,0,0,0.35)] transition-colors hover:bg-red-500 active:shadow-[inset_0_3px_6px_rgba(0,0,0,0.5)]"
-        title="緊急停止 (Space / Esc)"
+        title="緊急停止 (Esc)"
       >
         <OctagonX size={22} strokeWidth={2.5} />
-        <span className="font-mono text-base font-black uppercase tracking-[0.3em]">Space / Esc — All Stop</span>
+        <span className="font-mono text-base font-black uppercase tracking-[0.3em]">Esc — All Stop</span>
       </button>
 
       {editingSlot && (

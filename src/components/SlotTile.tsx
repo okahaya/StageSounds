@@ -29,12 +29,16 @@ export function SlotTile({ entry, slot, runtime, editMode, onActivate, onOpenEdi
   const { state } = runtime;
 
   const ledClass =
-    state === "playing" ? "bg-stage-playing" : state === "fading-out" ? "bg-stage-fading animate-pulse" : "bg-transparent";
+    state === "playing" ? "bg-stage-playing" : state === "fading-out"
+        ? "bg-stage-fading animate-pulse"
+        : state === "paused"
+          ? "bg-stage-fading"
+          : "bg-transparent";
 
   const borderClass =
     state === "playing"
       ? "border-stage-playing"
-      : state === "fading-out"
+      : state === "fading-out" || state === "paused"
         ? "border-stage-fading"
         : dragOver
           ? "border-white border-dashed"
@@ -42,11 +46,15 @@ export function SlotTile({ entry, slot, runtime, editMode, onActivate, onOpenEdi
             ? "border-stage-border"
             : "border-stage-border/60 border-dashed";
 
-  const bgClass = state === "playing" || state === "fading-out" ? "bg-stage-surface" : hasAudio ? "bg-stage-surface2" : "bg-stage-bg";
+  const bgClass = state === "playing" || state === "fading-out" || state === "paused" ? "bg-stage-surface" : hasAudio ? "bg-stage-surface2" : "bg-stage-bg";
   const bevelClass = state === "playing" ? PRESSED_BEVEL : RAISED_BEVEL;
 
   const keyTextClass =
-    state === "playing" ? "text-stage-playing" : state === "fading-out" ? "text-stage-fading" : "text-white";
+    state === "playing"
+      ? "text-stage-playing"
+      : state === "fading-out" || state === "paused"
+        ? "text-stage-fading"
+        : "text-white";
 
   function handleDrop(e: React.DragEvent) {
     e.preventDefault();
@@ -115,6 +123,7 @@ export function SlotTile({ entry, slot, runtime, editMode, onActivate, onOpenEdi
             {slot.fadeOut}s
           </span>
         )}
+        {state === "paused" && <span className="text-stage-fading">一時停止</span>}
         {runtime.isDecoding && <span className="text-stage-fading">読込中</span>}
       </div>
     </div>

@@ -2,7 +2,7 @@
  *  レイアウト非依存（QWERTY/AZERTY等)でも団体間の設定共有時に位置がずれないようにするため。 */
 export type KeyCode = string;
 
-export type PlaybackState = "idle" | "playing" | "fading-out";
+export type PlaybackState = "idle" | "playing" | "fading-out" | "paused";
 
 export interface SlotConfig {
   key: KeyCode;
