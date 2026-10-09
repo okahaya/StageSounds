@@ -55,7 +55,8 @@ function sanitizeFade(seconds: number): number {
  * (=音声スレッドの多重起動・リソースリーク)を防ぐため。
  */
 export class AudioManager extends EventTarget {
-  private ctx: AudioContext;
+  /** 生成に失敗した場合は null。モジュール読み込み時の例外でアプリ全体(緊急停止キーを含む)が起動不能になるのを防ぐため。 */
+  private ctx: AudioContext | null;
   private active: ActivePlayback | null = null;
   /** フェードアウト中を含め、現在音を出している可能性のある全系統。 */
   private sounding = new Set<ActivePlayback>();
@@ -63,7 +64,12 @@ export class AudioManager extends EventTarget {
 
   constructor() {
     super();
-    this.ctx = this.createContext();
+    try {
+      this.ctx = this.createContext();
+    } catch (err) {
+      console.error("AudioContext を作成できませんでした", err);
+      this.ctx = null;
+    }
   }
 
   private createContext(): AudioContext {
@@ -74,20 +80,51 @@ export class AudioManager extends EventTarget {
     return ctx;
   }
 
-  get audioContext(): AudioContext {
+  /** AudioContext を返す。未生成(起動時の生成失敗)なら作り直しを試み、それでも失敗すれば例外を投げる。 */
+  private ensureContext(): AudioContext {
+    if (!this.ctx) {
+      this.ctx = this.createContext();
+      this.emitContextState();
+    }
     return this.ctx;
   }
 
-  /** AudioContext の状態。Safari は非標準の "interrupted" を返すことがある。 */
+  get audioContext(): AudioContext {
+    return this.ensureContext();
+  }
+
+  /** AudioContext の状態。Safari は非標準の "interrupted" を返すことがある。生成に失敗している場合は "closed"。 */
   get contextState(): AudioContextState | "interrupted" {
-    return this.ctx.state as AudioContextState | "interrupted";
+    return (this.ctx?.state ?? "closed") as AudioContextState | "interrupted";
+  }
+
+  /** 再生中・フェードアウト中・一時停止中のいずれかの音があるか(団体切替などで音を失わせないための判定用)。 */
+  get isBusy(): boolean {
+    return this.active !== null || this.paused !== null || this.sounding.size > 0;
+  }
+
+  /** 指定スロットの現在の再生状態。画面の作り直し(エラーからの復旧)時に表示を実際の状態へ合わせるために使う。 */
+  getSlotState(slotKey: KeyCode): PlaybackState {
+    if (this.active?.slotKey === slotKey) return "playing";
+    if (this.paused?.slotKey === slotKey) return "paused";
+    for (const p of this.sounding) {
+      if (p.slotKey === slotKey && p.stopping) return "fading-out";
+    }
+    return "idle";
   }
 
   /** ブラウザの自動再生ポリシー対策。ユーザー操作イベント内で呼ぶこと。応答しない場合も一定時間で戻る。 */
   async resume(): Promise<void> {
-    if (this.ctx.state === "running") return;
+    let ctx: AudioContext;
+    try {
+      ctx = this.ensureContext();
+    } catch (err) {
+      console.warn("AudioContext を作成できませんでした", err);
+      return;
+    }
+    if (ctx.state === "running") return;
     await Promise.race([
-      this.ctx.resume().catch((err) => console.warn("AudioContext.resume 失敗", err)),
+      ctx.resume().catch((err) => console.warn("AudioContext.resume 失敗", err)),
       new Promise<void>((resolve) => setTimeout(resolve, RESUME_TIMEOUT_MS)),
     ]);
   }
@@ -100,15 +137,16 @@ export class AudioManager extends EventTarget {
   async restartContext(): Promise<void> {
     this.panicStop();
     const old = this.ctx;
-    this.ctx = this.createContext();
-    void old.close().catch(() => {});
+    this.ctx = null;
+    void old?.close().catch(() => {});
+    // resume() 内で新しい AudioContext を生成する(失敗しても例外にせず、状態表示で知らせる)。
     await this.resume();
     this.emitContextState();
   }
 
   async decode(data: ArrayBuffer): Promise<AudioBuffer> {
     // decodeAudioData は渡した ArrayBuffer を detach/消費することがあるため複製する。
-    return this.ctx.decodeAudioData(data.slice(0));
+    return this.ensureContext().decodeAudioData(data.slice(0));
   }
 
   get currentSlotKey(): KeyCode | null {
@@ -121,7 +159,7 @@ export class AudioManager extends EventTarget {
     if (!this.active || this.active.slotKey !== slotKey) return null;
     const { source, startTime } = this.active;
     const buffer = source.buffer;
-    if (!buffer || buffer.duration <= 0) return 0;
+    if (!buffer || buffer.duration <= 0 || !this.ctx) return 0;
     const elapsed = this.ctx.currentTime - startTime;
     return source.loop ? elapsed % buffer.duration : Math.min(elapsed, buffer.duration);
   }
@@ -204,14 +242,15 @@ export class AudioManager extends EventTarget {
 
   /** offset > 0 の場合は一時停止からの再開とみなし、フェードインはクリック防止の極短フェードのみにする。 */
   private startPlayback(slotKey: KeyCode, buffer: AudioBuffer, options: PlaybackOptions, offset = 0): void {
-    const source = this.ctx.createBufferSource();
+    const ctx = this.ensureContext();
+    const source = ctx.createBufferSource();
     source.buffer = buffer;
     source.loop = options.loop;
 
-    const gain = this.ctx.createGain();
-    source.connect(gain).connect(this.ctx.destination);
+    const gain = ctx.createGain();
+    source.connect(gain).connect(ctx.destination);
 
-    const now = this.ctx.currentTime;
+    const now = ctx.currentTime;
     const fadeIn = offset > 0 ? DECLICK_SECONDS : sanitizeFade(options.fadeIn);
     if (fadeIn > 0) {
       gain.gain.setValueAtTime(MIN_GAIN, now);
@@ -248,7 +287,7 @@ export class AudioManager extends EventTarget {
     playback.stopping = true;
     this.active = null;
 
-    const now = this.ctx.currentTime;
+    const now = this.ctx?.currentTime ?? 0;
     const { gain, source, slotKey } = playback;
 
     if (fadeOut > 0) {
@@ -264,8 +303,8 @@ export class AudioManager extends EventTarget {
       }
       source.onended = () => {
         this.sounding.delete(playback);
-        // フェードアウト中に同じスロットが再トリガーされた場合、UI を idle に戻してはいけない。
-        if (this.active?.slotKey !== slotKey) this.emitState(slotKey, "idle");
+        // フェードアウト中に同じスロットが再トリガー(さらに一時停止)された場合、UI を idle に戻してはいけない。
+        if (this.active?.slotKey !== slotKey && this.paused?.slotKey !== slotKey) this.emitState(slotKey, "idle");
       };
     } else {
       this.sounding.delete(playback);
@@ -275,7 +314,7 @@ export class AudioManager extends EventTarget {
   }
 
   private hardSilence(playback: ActivePlayback): void {
-    const now = this.ctx.currentTime;
+    const now = this.ctx?.currentTime ?? 0;
     const { gain, source } = playback;
     source.onended = null;
     try {

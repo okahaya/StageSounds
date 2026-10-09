@@ -237,11 +237,11 @@ export default function App() {
     }
     const buffers = groupBuffers;
 
-    const playingKey = audioManagerRef.current.currentSlotKey;
+    // エラー画面からの復旧(再マウント)時も、一時停止中・フェードアウト中を含む実際の再生状態を表示に反映する。
     const initialRuntime = new Map<string, SlotRuntimeState>();
     for (const slot of group.slots) {
       initialRuntime.set(slot.key, {
-        state: slot.key === playingKey ? "playing" : "idle",
+        state: audioManagerRef.current.getSlotState(slot.key),
         hasAudio: !!slot.fileName && buffers.has(slot.fileName),
         isDecoding: !!slot.fileName && !buffers.has(slot.fileName),
       });
@@ -456,7 +456,15 @@ export default function App() {
     }));
   }
 
+  /** 団体が切り替わると音が止まるため、再生中・フェードアウト中・一時停止中は団体の作成・削除を受け付けない。 */
+  function rejectIfBusy(): boolean {
+    if (!audioManagerRef.current.isBusy) return false;
+    showError("再生中・一時停止中は団体の作成・削除はできません（Esc で停止してから操作してください）");
+    return true;
+  }
+
   async function handleCreateGroup() {
+    if (rejectIfBusy()) return;
     const group = createEmptyGroup("新しい団体");
     try {
       await saveGroup(group);
@@ -471,6 +479,7 @@ export default function App() {
 
   async function handleDeleteGroup() {
     if (!currentGroup) return;
+    if (rejectIfBusy()) return;
     const ok = window.confirm(`団体「${currentGroup.groupName}」を削除します。この操作は取り消せません。よろしいですか？`);
     if (!ok) return;
     const deletingId = currentGroup.id;
@@ -530,8 +539,8 @@ export default function App() {
       }
       await saveGroup(profile);
       setGroups((prev) => [...prev, profile]);
-      // 再生中に読み込んだ場合は、団体を切り替えて音を止めてしまわないよう、追加のみ行う。
-      const playing = audioManagerRef.current.currentSlotKey !== null;
+      // 再生中(フェードアウト中・一時停止中を含む)に読み込んだ場合は、団体を切り替えて音を止めてしまわないよう、追加のみ行う。
+      const playing = audioManagerRef.current.isBusy;
       if (!playing) setCurrentGroupId(importId);
       if (missingFiles.length > 0) {
         showError(`「${profile.groupName}」に含まれていない音源が${missingFiles.length}件あります: ${missingFiles.slice(0, 3).join(", ")}`);

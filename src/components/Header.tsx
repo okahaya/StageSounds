@@ -13,7 +13,7 @@ interface HeaderProps {
   onToggleEditMode: () => void;
   onExport: () => void;
   onImportFile: (file: File) => void;
-  /** 再生中は団体切替を禁止する(誤操作で本番中の音が止まるのを防ぐ)。 */
+  /** 再生中は団体の切替・作成・削除を禁止する(誤操作で本番中の音が止まるのを防ぐ)。 */
   groupSwitchLocked: boolean;
 }
 
@@ -44,14 +44,19 @@ export function Header({
         {editMode && (
           <>
             <div className="mx-1 h-6 w-px bg-stage-border" />
-            <button onClick={onCreateGroup} className={btn} title="新しい団体を作成">
+            <button
+              onClick={onCreateGroup}
+              disabled={groupSwitchLocked}
+              className={btn}
+              title={groupSwitchLocked ? "再生中は団体を作成できません（停止してから操作してください）" : "新しい団体を作成"}
+            >
               <FolderPlus size={13} /> 新規団体
             </button>
             <button
               onClick={onDeleteGroup}
-              disabled={!currentGroup}
+              disabled={!currentGroup || groupSwitchLocked}
               className="flex items-center gap-1 rounded-sm border border-stage-danger/50 bg-stage-danger/10 px-2.5 py-1.5 text-xs font-medium text-stage-danger hover:border-stage-danger disabled:opacity-30"
-              title="この団体を削除"
+              title={groupSwitchLocked ? "再生中は団体を削除できません（停止してから操作してください）" : "この団体を削除"}
             >
               <Trash2 size={13} />
             </button>

@@ -7,6 +7,7 @@
   ],
   "permissions": [
     "core:default",
+    "core:window:allow-destroy",
     {
       "identifier": "fs:allow-mkdir",
       "allow": [{ "path": "$APPDATA/audio/**" }]
