@@ -132,10 +132,15 @@ export function SystemStatusBar({ editMode, slotHealth, decodedBytes, isPlaying,
           </Chip>
         )}
 
+        {/* 出力機器の抜き差し後は "running" のまま無音になることがあるため、再生していない時は常に再起動できるようにする。 */}
         <Chip
           level={audioLevel}
-          title="オーディオ出力の状態。赤/橙のままの場合はクリックでオーディオを再起動します(音源の再読込は不要)。"
-          onClick={audioState === "running" ? undefined : () => void audioManager.restartContext()}
+          title={
+            audioState === "running" && isPlaying
+              ? "オーディオ出力の状態。再生中は再起動できません。"
+              : "オーディオ出力の状態。音が出ない・赤/橙のままの場合はクリックでオーディオを再起動します(音源の再読込は不要)。"
+          }
+          onClick={audioState === "running" && isPlaying ? undefined : () => void audioManager.restartContext()}
         >
           {audioLabel}
         </Chip>
