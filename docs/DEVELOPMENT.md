@@ -85,8 +85,8 @@ Vite の開発サーバー / `dist` ビルドと連携する形で Tauri (v2) �
 `build.devUrl` / `build.frontendDist` で連携設定）。
 
 **通常はビルドを手動で行う必要はありません。** `main` ブランチを更新するたびに GitHub Actions
-（[.github/workflows/release.yml](../.github/workflows/release.yml)）が自動でWindows用 `.exe` と
-macOS用 `.app` をビルドし、[Releases](https://github.com/okahaya/StageSounds/releases/latest)
+（[.github/workflows/release.yml](../.github/workflows/release.yml)）が自動でWindows用 `.exe` を
+ビルドし、[Releases](https://github.com/okahaya/StageSounds/releases/latest)
 ページに `build-<番号>` として公開します（過去のビルドも残るので、問題があれば一つ前に戻せます）。
 実行委員はそこからダウンロードするだけで済みます。
 
@@ -99,7 +99,6 @@ macOS用 `.app` をビルドし、[Releases](https://github.com/okahaya/StageSou
 
 - **共通**: Rust ツールチェイン（[rustup](https://rustup.rs/) でインストール）
 - **Windows**: Visual Studio の「C++ によるデスクトップ開発」ワークロード（MSVC ビルドツール）
-- **macOS**: Xcode Command Line Tools（`xcode-select --install`）
 
 ### 開発時の起動
 
@@ -109,27 +108,20 @@ npm run desktop:dev   # tauri dev — ネイティブウィンドウが Vite 開
 
 ### ポータブル版のビルド
 
-インストーラー（NSIS/MSI や dmg）は作らず、ダブルクリックでそのまま起動する単一ファイルを出力する。
+インストーラー（NSIS/MSI）は作らず、ダブルクリックでそのまま起動する単一ファイルを出力する。
 
 ```bash
 # Windows: ポータブル単一 .exe
 npm run desktop:build:win-portable
 # -> src-tauri/target/release/stagesounds.exe
-
-# macOS: .app バンドル（dmgインストーラーは作らない）
-npm run desktop:build:mac-app
-# -> src-tauri/target/release/bundle/macos/音響くん.app
 ```
 
 - `--no-bundle`（Windows用スクリプト）は Rust バイナリのコンパイルのみ行い、NSIS/MSI インストーラー
   作成をスキップする。生成される `stagesounds.exe` は単一ファイルで、USBメモリ等からそのまま
   ダブルクリック起動できる（Windows 10/11 標準搭載の WebView2 ランタイムを利用するため、追加インストール
   は基本的に不要）。
-- `--bundles app`（macOS用スクリプト）は `.app` バンドルのみを生成し、`.dmg` インストーラー作成をスキップ
-  する。`.app` はそのまま Dock やデスクトップに置いて起動できる、Mac標準の実行形式。
 - 初回ビルドは Rust の依存クレートをすべてコンパイルするため数分〜十数分かかるが、2回目以降は
   差分コンパイルになり大幅に短縮される。
-- 未署名バイナリのため、macOS では初回起動時に Gatekeeper の警告が出ることがある
-  （右クリック→「開く」で回避可能）。学祭内利用のような限定配布では通常問題ない。
+- macOS 版は配布しない（未署名アプリは Gatekeeper で起動を止められるため）。Mac ではブラウザ版を使う。
 - ビルド成果物（`src-tauri/target/`）は `.gitignore` 対象。配布時はビルド後のファイルを直接
   USBメモリ等にコピーする。

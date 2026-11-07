@@ -55,56 +55,14 @@ jobs:
           name: windows-build
           path: dist-desktop/Onkyokun-Windows.exe
 
-  build-macos:
-    if: vars.DEPLOY_FREEZE != 'true' || inputs.force_release
-    runs-on: macos-latest
-    timeout-minutes: 60
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: src-tauri
-
-      - name: Install frontend dependencies
-        run: npm ci
-
-      - name: Build macOS .app
-        run: npm run desktop:build:mac-app
-
-      - name: Zip .app bundle
-        run: |
-          mkdir -p dist-desktop
-          ditto -c -k --sequesterRsrc --keepParent \
-            "src-tauri/target/release/bundle/macos/音響くん.app" \
-            "dist-desktop/Onkyokun-macOS.zip"
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: macos-build
-          path: dist-desktop/Onkyokun-macOS.zip
-
   release:
-    needs: [build-windows, build-macos]
+    needs: [build-windows]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/download-artifact@v4
         with:
           name: windows-build
-          path: dist-desktop
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: macos-build
           path: dist-desktop
 
       # ビルドごとに別タグ(build-<番号>)の固定リリースを作る。
@@ -124,14 +82,12 @@ jobs:
             ## ダウンロード方法
 
             - **Windows**: `Onkyokun-Windows.exe` をダウンロードして、ダブルクリックで起動してください（インストール不要）。
-            - **Mac**: `Onkyokun-macOS.zip` をダウンロードして解凍し、中の `音響くん.app` をダブルクリックで起動してください。
-              - 初回起動時に「開発元が未確認のため開けません」と表示された場合は、アプリを右クリック（または Control+クリック）して「開く」を選んでください。
+            - **Mac**: アプリ版はありません。ブラウザ版（https://okahaya.github.io/StageSounds/）を使ってください。
 
             このリリースは main ブランチが更新されるたびに自動的に作成されます。
             新しいビルドで問題が起きた場合は、Releases 一覧から一つ前のビルドをダウンロードしてください。
           files: |
             dist-desktop/Onkyokun-Windows.exe
-            dist-desktop/Onkyokun-macOS.zip
 
       # 旧方式の latest タグのリリースが残っていると古いビルドを掴む人が出るため、
       # 新しいリリースの公開に成功した「後」で削除する(ダウンロード不能な時間を作らない)。

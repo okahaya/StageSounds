@@ -11,8 +11,7 @@
     "lint": "eslint .",
     "tauri": "tauri",
     "desktop:dev": "tauri dev",
-    "desktop:build:win-portable": "tauri build --no-bundle",
-    "desktop:build:mac-app": "tauri build --bundles app"
+    "desktop:build:win-portable": "tauri build --no-bundle"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.11.1",

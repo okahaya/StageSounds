@@ -6,13 +6,10 @@
 
 ブラウザで開く: https://okahaya.github.io/StageSounds/
 
-アプリ版をダウンロード: https://github.com/okahaya/StageSounds/releases/latest
+Windows アプリ版をダウンロード: https://github.com/okahaya/StageSounds/releases/latest
+（`Onkyokun-Windows.exe` をダウンロードして、ダブルクリック。インストール不要）
 
-- Windows: `Onkyokun-Windows.exe` をダウンロードして、ダブルクリック
-- Mac: `Onkyokun-macOS.zip` をダウンロードして解凍し、`音響くん.app` をダブルクリック
-  （「開発元が未確認」と出たら、右クリック →「開く」）
-
-本番ではアプリ版をおすすめします。
+Mac はブラウザ版を使ってください。
 
 ## 使い方
 
