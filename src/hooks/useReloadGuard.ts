@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { confirmDialog } from "../components/ConfirmDialog";
 
 /** F5 / Ctrl(Cmd)+R / Ctrl(Cmd)+Shift+R によるリロードキー操作か判定する。 */
 function isReloadShortcut(e: KeyboardEvent): boolean {
@@ -26,10 +27,16 @@ export function useReloadGuard(active: boolean): void {
     let disposed = false;
     let unlisten: (() => void) | null = null;
     getCurrentWindow()
-      .onCloseRequested((event) => {
-        if (activeRef.current && !window.confirm("音響くん を終了します。再生中の音は止まります。よろしいですか？")) {
-          event.preventDefault();
-        }
+      // ハンドラは async でよい(Tauri は完了を待ってから、preventDefault されていなければウィンドウを閉じる)。
+      .onCloseRequested(async (event) => {
+        if (!activeRef.current) return;
+        const ok = await confirmDialog({
+          title: "音響くんを終了しますか？",
+          message: "再生中の音は止まります。",
+          confirmLabel: "Quit",
+          danger: true,
+        });
+        if (!ok) event.preventDefault();
       })
       .then((fn) => {
         if (disposed) fn();

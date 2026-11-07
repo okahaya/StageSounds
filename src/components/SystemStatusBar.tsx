@@ -3,6 +3,7 @@ import { AlertTriangle } from "lucide-react";
 import { audioManager } from "../audio/AudioManager";
 import { isDuplicateInstance, onDuplicateInstanceChange } from "../safety/globalGuards";
 import { applyPwaUpdate, getPwaStatus, onPwaStatusChange } from "../safety/pwaUpdate";
+import { confirmDialog } from "./ConfirmDialog";
 
 export interface SlotHealth {
   assigned: number;
@@ -125,8 +126,13 @@ export function SystemStatusBar({ slotHealth, decodedBytes, isPlaying, storageEr
               onClick={
                 isPlaying
                   ? undefined
-                  : () => {
-                      if (window.confirm("新しいバージョンに更新して再読み込みします。本番中は更新しないでください。続けますか？")) applyPwaUpdate();
+                  : async () => {
+                      const ok = await confirmDialog({
+                        title: "新しいバージョンに更新しますか？",
+                        message: "アプリを再読み込みします。本番中は更新しないでください。",
+                        confirmLabel: "Update",
+                      });
+                      if (ok) applyPwaUpdate();
                     }
               }
             >

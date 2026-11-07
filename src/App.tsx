@@ -8,6 +8,7 @@ import { SystemStatusBar, type SlotHealth } from "./components/SystemStatusBar";
 import { Toast, type ToastState } from "./components/Toast";
 import { WaveformDisplay } from "./components/WaveformDisplay";
 import { useKeyboard } from "./hooks/useKeyboard";
+import { ConfirmDialogHost, confirmDialog, useConfirmOpen } from "./components/ConfirmDialog";
 import { useReloadGuard } from "./hooks/useReloadGuard";
 import { computePeaksAsync } from "./audio/waveformPeaks";
 import { onUncaughtError } from "./safety/globalGuards";
@@ -480,9 +481,14 @@ export default function App() {
   async function handleDeleteGroup() {
     if (!currentGroup) return;
     if (rejectIfBusy()) return;
-    const ok = window.confirm(`団体「${currentGroup.groupName}」を削除します。この操作は取り消せません。よろしいですか？`);
-    if (!ok) return;
     const deletingId = currentGroup.id;
+    const ok = await confirmDialog({
+      title: `「${currentGroup.groupName}」を削除しますか？`,
+      message: "割り当てた音源もすべて削除されます。この操作は取り消せません。",
+      confirmLabel: "Delete",
+      danger: true,
+    });
+    if (!ok) return;
     try {
       await deleteGroupFromDb(deletingId);
     } catch (err) {
@@ -563,9 +569,10 @@ export default function App() {
     return IMPORT_EXTENSIONS.some((ext) => name.endsWith(ext));
   }
 
+  const confirmOpen = useConfirmOpen();
   useKeyboard({
     onTrigger: (code) => void handleActivate(code),
-    suspended: editingKey !== null,
+    suspended: editingKey !== null || confirmOpen,
   });
 
   // 音声が登録されている、または再生中のときは誤リロード・誤離脱を防止する。
@@ -699,6 +706,8 @@ export default function App() {
           onRemoveFile={() => handleRemoveFile(editingSlot.key)}
         />
       )}
+
+      <ConfirmDialogHost />
     </div>
   );
 }
