@@ -12,9 +12,9 @@ export default defineConfig({
       injectRegister: false,
       includeAssets: ["apple-touch-icon.png"],
       manifest: {
-        name: "StageSounds",
-        short_name: "StageSounds",
-        description: "低遅延・高信頼性のステージ音響ポン出し（サンプラー）アプリケーション",
+        name: "音響くん",
+        short_name: "音響くん",
+        description: "キーボードで操作するステージ音響アプリ",
         display: "standalone",
         start_url: "./",
         scope: "./",

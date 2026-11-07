@@ -1,6 +1,6 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "StageSounds",
+  "productName": "音響くん",
   "version": "0.1.0",
   "identifier": "com.stagesounds.desktop",
   "build": {
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "StageSounds",
+        "title": "音響くん",
         "width": 1280,
         "height": 860,
         "minWidth": 900,

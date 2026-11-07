@@ -27,7 +27,7 @@ export function useReloadGuard(active: boolean): void {
     let unlisten: (() => void) | null = null;
     getCurrentWindow()
       .onCloseRequested((event) => {
-        if (activeRef.current && !window.confirm("StageSounds を終了します。再生中の音は止まります。よろしいですか？")) {
+        if (activeRef.current && !window.confirm("音響くん を終了します。再生中の音は止まります。よろしいですか？")) {
           event.preventDefault();
         }
       })

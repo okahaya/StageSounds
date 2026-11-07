@@ -12,8 +12,8 @@ interface WaveformDisplayProps {
   playbackState: PlaybackState;
 }
 
-const WAVEFORM_COLOR = "#4b5563";
-const PLAYHEAD_COLOR = "#00e676";
+const WAVEFORM_COLOR = "#52525b"; // zinc-600
+const PLAYHEAD_COLOR = "rgb(74 222 128)"; // --stage-accent
 
 function formatTime(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds < 0) seconds = 0;
@@ -106,17 +106,17 @@ export function WaveformDisplay({ audioManager, slotKey, peaks, duration, label,
   const hasWaveform = !!peaks && peaks.length >= 2;
 
   return (
-    <div className="border-t border-stage-border bg-stage-surface2 px-4 py-2">
-      <div className="mb-1 flex items-center justify-between font-mono text-[11px] uppercase tracking-wide text-stage-muted">
+    <div className="border-t border-stage-border px-4 py-2">
+      <div className="mb-1 flex items-center justify-between text-xs text-stage-muted">
         <span className="flex items-center gap-1.5 truncate">
           <AudioWaveform size={12} />
-          {hasWaveform ? label : "波形表示"}
+          {hasWaveform ? label : "—"}
         </span>
-        <span className="tabular-nums text-white">
+        <span className="font-mono tabular-nums text-stage-fg">
           {formatTime(currentTime)} / {formatTime(duration)}
         </span>
       </div>
-      <div ref={containerRef} className="relative h-16 w-full overflow-hidden rounded-sm border border-stage-border bg-stage-bg">
+      <div ref={containerRef} className="relative h-16 w-full overflow-hidden rounded border border-stage-border bg-stage-surface2">
         <canvas ref={canvasRef} className="absolute inset-0 h-full w-full" />
         {hasWaveform && (
           <div
@@ -125,8 +125,8 @@ export function WaveformDisplay({ audioManager, slotKey, peaks, duration, label,
           />
         )}
         {!hasWaveform && (
-          <div className="absolute inset-0 flex items-center justify-center font-mono text-[11px] text-stage-muted">
-            音源を再生すると波形が表示されます
+          <div className="absolute inset-0 flex items-center justify-center text-xs text-stage-muted">
+            Nothing playing
           </div>
         )}
       </div>

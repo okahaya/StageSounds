@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Repeat, ArrowRightToLine, ArrowLeftToLine } from "lucide-react";
+import { Repeat, ArrowRightToLine, ArrowLeftToLine, Pause, AlertTriangle, Loader2 } from "lucide-react";
 import type { SlotConfig, SlotRuntimeState } from "../types";
 import type { KeyLayoutEntry } from "../utils/keys";
 
@@ -15,9 +15,6 @@ interface SlotTileProps {
 
 const AUDIO_EXTENSIONS = [".mp3", ".wav", ".aac", ".m4a", ".ogg"];
 
-const RAISED_BEVEL = "shadow-[inset_0_1px_0_rgba(255,255,255,0.06),inset_0_-2px_0_rgba(0,0,0,0.5)]";
-const PRESSED_BEVEL = "shadow-[inset_0_2px_5px_rgba(0,0,0,0.65),inset_0_-1px_0_rgba(255,255,255,0.03)]";
-
 function isAudioFile(file: File): boolean {
   const name = file.name.toLowerCase();
   return AUDIO_EXTENSIONS.some((ext) => name.endsWith(ext));
@@ -25,39 +22,25 @@ function isAudioFile(file: File): boolean {
 
 export function SlotTile({ entry, slot, runtime, editMode, onActivate, onOpenEditor, onDropFile }: SlotTileProps) {
   const [dragOver, setDragOver] = useState(false);
-  const hasAudio = runtime.hasAudio;
-  const { state } = runtime;
+  const { state, hasAudio, loadError, isDecoding } = runtime;
+  const assigned = hasAudio || !!loadError || isDecoding;
 
-  const ledClass =
-    state === "playing" ? "bg-stage-playing" : state === "fading-out"
-        ? "bg-stage-fading animate-pulse"
-        : state === "paused"
-          ? "bg-stage-fading"
-          : "bg-transparent";
-
-  const loadError = runtime.loadError;
-
-  const borderClass = loadError
-    ? "border-stage-danger"
+  // 色は「再生中 = アクセント」「一時停止 = 白枠」「エラー = 赤」の3種類だけ。
+  const toneClass = loadError
+    ? "border-stage-danger/70 bg-stage-danger/10"
     : state === "playing"
-      ? "border-stage-playing"
-      : state === "fading-out" || state === "paused"
-        ? "border-stage-fading"
-        : dragOver
-          ? "border-white border-dashed"
-          : hasAudio
-            ? "border-stage-border"
-            : "border-stage-border/60 border-dashed";
+      ? "border-stage-accent bg-stage-accent/15"
+      : state === "fading-out"
+        ? "border-stage-accent/60 bg-stage-accent/10 animate-pulse"
+        : state === "paused"
+          ? "border-stage-fg/70 bg-stage-surface"
+          : dragOver
+            ? "border-stage-fg border-dashed bg-stage-surface"
+            : assigned
+              ? "border-stage-border bg-stage-surface hover:border-stage-muted/50"
+              : "border-stage-border/60 border-dashed bg-transparent";
 
-  const bgClass = state === "playing" || state === "fading-out" || state === "paused" ? "bg-stage-surface" : hasAudio ? "bg-stage-surface2" : "bg-stage-bg";
-  const bevelClass = state === "playing" ? PRESSED_BEVEL : RAISED_BEVEL;
-
-  const keyTextClass =
-    state === "playing"
-      ? "text-stage-playing"
-      : state === "fading-out" || state === "paused"
-        ? "text-stage-fading"
-        : "text-white";
+  const keyClass = state === "playing" || state === "fading-out" ? "text-stage-accent" : "text-stage-muted";
 
   function handleDrop(e: React.DragEvent) {
     e.preventDefault();
@@ -89,51 +72,41 @@ export function SlotTile({ entry, slot, runtime, editMode, onActivate, onOpenEdi
       }}
       onDragLeave={() => setDragOver(false)}
       onDrop={handleDrop}
-      className={`no-select relative flex h-28 w-28 shrink-0 cursor-pointer flex-col justify-between rounded-sm border ${borderClass} ${bgClass} ${bevelClass} p-2`}
-      title={loadError ? `${loadError}: ${slot.fileName}（編集で音源を割り当て直してください）` : (slot.fileName ?? undefined)}
+      className={`no-select relative flex h-28 w-28 shrink-0 cursor-pointer flex-col rounded-md border p-2.5 transition-colors ${toneClass}`}
+      title={loadError ? `${loadError}: ${slot.fileName}` : (slot.fileName ?? undefined)}
     >
-      <div className={`absolute inset-x-0 top-0 h-[3px] rounded-t-sm ${ledClass}`} />
-
-      <div className="flex items-start justify-between pt-0.5">
-        <span className={`font-mono text-xl font-bold leading-none ${keyTextClass}`}>{entry.display}</span>
+      <div className="flex items-center justify-between">
+        <span className={`font-mono text-sm font-semibold leading-none ${keyClass}`}>{entry.display}</span>
+        {state === "paused" && <Pause size={12} className="text-stage-fg" />}
+        {isDecoding && <Loader2 size={12} className="animate-spin text-stage-muted" />}
+        {loadError && <AlertTriangle size={12} className="text-stage-danger" />}
       </div>
 
-      <div className="flex flex-1 items-center overflow-hidden py-1">
-        {(hasAudio || loadError) && (
-          <span className={`line-clamp-2 text-xs font-medium leading-tight ${loadError ? "text-stage-danger" : "text-white"}`}>
+      <div className="flex flex-1 items-end overflow-hidden pb-1">
+        {assigned && (
+          <span className={`line-clamp-3 text-[13px] font-medium leading-snug ${loadError ? "text-stage-danger" : "text-stage-fg"}`}>
             {slot.label}
           </span>
         )}
       </div>
 
-      <div className="flex flex-wrap items-center gap-1 font-mono text-[9px] uppercase tracking-wide text-stage-muted">
-        {slot.loop && (
-          <span className="flex items-center gap-0.5 rounded-sm border border-stage-border bg-stage-bg/60 px-1 py-0.5" title="ループ再生">
-            <Repeat size={9} />
-          </span>
-        )}
-        {slot.fadeIn > 0 && (
-          <span
-            className="flex items-center gap-0.5 rounded-sm border border-stage-border bg-stage-bg/60 px-1 py-0.5"
-            title={`フェードイン ${slot.fadeIn}s`}
-          >
-            <ArrowRightToLine size={9} />
-            {slot.fadeIn}s
-          </span>
-        )}
-        {slot.fadeOut > 0 && (
-          <span
-            className="flex items-center gap-0.5 rounded-sm border border-stage-border bg-stage-bg/60 px-1 py-0.5"
-            title={`フェードアウト ${slot.fadeOut}s`}
-          >
-            <ArrowLeftToLine size={9} />
-            {slot.fadeOut}s
-          </span>
-        )}
-        {state === "paused" && <span className="text-stage-fading">一時停止</span>}
-        {runtime.isDecoding && <span className="text-stage-fading">読込中</span>}
-        {loadError && <span className="font-bold text-stage-danger">読込失敗</span>}
-      </div>
+      {(slot.loop || slot.fadeIn > 0 || slot.fadeOut > 0) && (
+        <div className="flex items-center gap-1.5 text-[10px] tabular-nums text-stage-muted">
+          {slot.loop && <Repeat size={10} aria-label="Loop" />}
+          {slot.fadeIn > 0 && (
+            <span className="flex items-center gap-0.5" title={`Fade in ${slot.fadeIn}s`}>
+              <ArrowRightToLine size={10} />
+              {slot.fadeIn}
+            </span>
+          )}
+          {slot.fadeOut > 0 && (
+            <span className="flex items-center gap-0.5" title={`Fade out ${slot.fadeOut}s`}>
+              <ArrowLeftToLine size={10} />
+              {slot.fadeOut}
+            </span>
+          )}
+        </div>
+      )}
     </div>
   );
 }

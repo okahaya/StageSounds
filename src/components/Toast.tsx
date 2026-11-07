@@ -28,17 +28,17 @@ export function Toast({ toast, onDismiss }: ToastProps) {
   return (
     <div className="pointer-events-none fixed inset-x-0 top-4 z-50 flex justify-center">
       <div
-        className={`pointer-events-auto flex items-center gap-2 rounded-sm border bg-stage-surface px-4 py-2.5 font-mono text-xs shadow-lg ${
-          isSuccess ? "border-stage-playing/50" : "border-stage-danger/50"
+        className={`pointer-events-auto flex items-center gap-2 rounded-md border bg-stage-surface px-4 py-2.5 text-sm shadow-xl ${
+          isSuccess ? "border-stage-border" : "border-stage-danger/50"
         }`}
       >
         {isSuccess ? (
-          <CheckCircle2 size={16} className="text-stage-playing" />
+          <CheckCircle2 size={16} className="text-stage-accent" />
         ) : (
           <XCircle size={16} className="text-stage-danger" />
         )}
-        <span className="text-white">{toast.message}</span>
-        <button onClick={onDismiss} className="ml-1 text-stage-muted hover:text-white" title="閉じる">
+        <span className="text-stage-fg">{toast.message}</span>
+        <button onClick={onDismiss} className="ml-1 text-stage-muted hover:text-stage-fg" title="Dismiss">
           <X size={14} />
         </button>
       </div>

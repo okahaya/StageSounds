@@ -1,8 +1,8 @@
 [package]
 name = "stagesounds"
 version = "0.1.0"
-description = "ステージ音響ポン出し（サンプラー）アプリケーション"
-authors = ["StageSounds"]
+description = "音響くん — キーボードで操作するステージ音響アプリ"
+authors = ["音響くん"]
 license = ""
 repository = ""
 edition = "2021"

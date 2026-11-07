@@ -48,12 +48,12 @@ jobs:
         shell: bash
         run: |
           mkdir -p dist-desktop
-          cp src-tauri/target/release/stagesounds.exe dist-desktop/StageSounds-Windows.exe
+          cp src-tauri/target/release/stagesounds.exe dist-desktop/Onkyokun-Windows.exe
 
       - uses: actions/upload-artifact@v4
         with:
           name: windows-build
-          path: dist-desktop/StageSounds-Windows.exe
+          path: dist-desktop/Onkyokun-Windows.exe
 
   build-macos:
     if: vars.DEPLOY_FREEZE != 'true' || inputs.force_release
@@ -84,13 +84,13 @@ jobs:
         run: |
           mkdir -p dist-desktop
           ditto -c -k --sequesterRsrc --keepParent \
-            "src-tauri/target/release/bundle/macos/StageSounds.app" \
-            "dist-desktop/StageSounds-macOS.zip"
+            "src-tauri/target/release/bundle/macos/音響くん.app" \
+            "dist-desktop/Onkyokun-macOS.zip"
 
       - uses: actions/upload-artifact@v4
         with:
           name: macos-build
-          path: dist-desktop/StageSounds-macOS.zip
+          path: dist-desktop/Onkyokun-macOS.zip
 
   release:
     needs: [build-windows, build-macos]
@@ -123,15 +123,15 @@ jobs:
           body: |
             ## ダウンロード方法
 
-            - **Windows**: `StageSounds-Windows.exe` をダウンロードして、ダブルクリックで起動してください（インストール不要）。
-            - **Mac**: `StageSounds-macOS.zip` をダウンロードして解凍し、中の `StageSounds.app` をダブルクリックで起動してください。
+            - **Windows**: `Onkyokun-Windows.exe` をダウンロードして、ダブルクリックで起動してください（インストール不要）。
+            - **Mac**: `Onkyokun-macOS.zip` をダウンロードして解凍し、中の `音響くん.app` をダブルクリックで起動してください。
               - 初回起動時に「開発元が未確認のため開けません」と表示された場合は、アプリを右クリック（または Control+クリック）して「開く」を選んでください。
 
             このリリースは main ブランチが更新されるたびに自動的に作成されます。
             新しいビルドで問題が起きた場合は、Releases 一覧から一つ前のビルドをダウンロードしてください。
           files: |
-            dist-desktop/StageSounds-Windows.exe
-            dist-desktop/StageSounds-macOS.zip
+            dist-desktop/Onkyokun-Windows.exe
+            dist-desktop/Onkyokun-macOS.zip
 
       # 旧方式の latest タグのリリースが残っていると古いビルドを掴む人が出るため、
       # 新しいリリースの公開に成功した「後」で削除する(ダウンロード不能な時間を作らない)。

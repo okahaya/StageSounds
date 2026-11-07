@@ -1,5 +1,5 @@
-import { useRef } from "react";
-import { Check, Download, FolderPlus, Pencil, Trash2, Upload } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Check, Download, FolderPlus, MoreHorizontal, Pencil, RotateCcw, Trash2, Upload } from "lucide-react";
 import type { GroupProfile } from "../types";
 
 interface HeaderProps {
@@ -13,12 +13,35 @@ interface HeaderProps {
   onToggleEditMode: () => void;
   onExport: () => void;
   onImportFile: (file: File) => void;
+  onRestartAudio: () => void;
   /** 再生中は団体の切替・作成・削除を禁止する(誤操作で本番中の音が止まるのを防ぐ)。 */
   groupSwitchLocked: boolean;
 }
 
 const btn =
-  "flex items-center gap-1.5 rounded-sm border border-stage-border bg-stage-surface2 px-2.5 py-1.5 text-xs font-medium text-white hover:border-white disabled:opacity-30 disabled:hover:border-stage-border";
+  "flex h-8 items-center gap-1.5 rounded border border-stage-border bg-stage-surface px-3 text-sm text-stage-fg hover:bg-stage-fg/5 disabled:pointer-events-none disabled:opacity-40";
+
+/** クリック後にフォーカスが残ると、以後のキー入力(Space 等)がボタンに吸われるため外す。 */
+function blurActive() {
+  if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+}
+
+function MenuItem({ icon, label, onClick, disabled, danger }: { icon: React.ReactNode; label: string; onClick: () => void; disabled?: boolean; danger?: boolean }) {
+  return (
+    <button
+      type="button"
+      tabIndex={-1}
+      disabled={disabled}
+      onClick={onClick}
+      className={`flex w-full items-center gap-2.5 rounded-sm px-2.5 py-1.5 text-left text-sm hover:bg-stage-fg/10 disabled:pointer-events-none disabled:opacity-40 ${
+        danger ? "text-stage-danger" : "text-stage-fg"
+      }`}
+    >
+      {icon}
+      {label}
+    </button>
+  );
+}
 
 export function Header({
   groups,
@@ -31,53 +54,37 @@ export function Header({
   onToggleEditMode,
   onExport,
   onImportFile,
+  onRestartAudio,
   groupSwitchLocked,
 }: HeaderProps) {
   const importInputRef = useRef<HTMLInputElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const close = (e: MouseEvent) => {
+      if (!menuRef.current?.contains(e.target as Node)) setMenuOpen(false);
+    };
+    const closeOnKey = () => setMenuOpen(false);
+    document.addEventListener("mousedown", close);
+    window.addEventListener("keydown", closeOnKey);
+    return () => {
+      document.removeEventListener("mousedown", close);
+      window.removeEventListener("keydown", closeOnKey);
+    };
+  }, [menuOpen]);
+
+  function runMenu(action: () => void) {
+    setMenuOpen(false);
+    blurActive();
+    action();
+  }
 
   return (
-    <header className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 border-b border-stage-border bg-stage-surface px-4 py-2.5">
-      <div className="flex items-center gap-2">
-        <span className="rounded-sm border border-stage-border px-1.5 py-0.5 font-mono text-[10px] font-bold tracking-[0.2em] text-stage-muted">
-          STAGE SOUNDS
-        </span>
-        {editMode && (
-          <>
-            <div className="mx-1 h-6 w-px bg-stage-border" />
-            <button
-              onClick={onCreateGroup}
-              disabled={groupSwitchLocked}
-              className={btn}
-              title={groupSwitchLocked ? "再生中は団体を作成できません（停止してから操作してください）" : "新しい団体を作成"}
-            >
-              <FolderPlus size={13} /> 新規団体
-            </button>
-            <button
-              onClick={onDeleteGroup}
-              disabled={!currentGroup || groupSwitchLocked}
-              className="flex items-center gap-1 rounded-sm border border-stage-danger/50 bg-stage-danger/10 px-2.5 py-1.5 text-xs font-medium text-stage-danger hover:border-stage-danger disabled:opacity-30"
-              title={groupSwitchLocked ? "再生中は団体を削除できません（停止してから操作してください）" : "この団体を削除"}
-            >
-              <Trash2 size={13} />
-            </button>
-          </>
-        )}
-      </div>
-
-      <div className="flex min-w-[16rem] items-center justify-center rounded-sm border border-stage-border bg-stage-bg px-6 py-1.5">
-        {editMode ? (
-          <input
-            value={currentGroup?.groupName ?? ""}
-            onChange={(e) => onRenameGroup(e.target.value)}
-            placeholder="団体名"
-            className="w-full bg-transparent text-center text-lg font-bold tracking-wide text-white outline-none placeholder:text-stage-muted"
-          />
-        ) : (
-          <span className="text-lg font-bold tracking-wide text-white">{currentGroup?.groupName ?? "団体未読込"}</span>
-        )}
-      </div>
-
-      <div className="flex items-center justify-end gap-2">
+    <header className="grid grid-cols-[1fr_auto_1fr] items-center gap-4 border-b border-stage-border px-4 py-2.5">
+      <div className="flex items-center gap-3">
+        <span className="text-sm font-semibold text-stage-muted">音響くん</span>
         <select
           value={currentGroup?.id ?? ""}
           onChange={(e) => {
@@ -86,23 +93,80 @@ export function Header({
             e.target.blur();
           }}
           disabled={groupSwitchLocked}
-          title={groupSwitchLocked ? "再生中は団体を切り替えられません（停止してから切り替えてください）" : "団体を切り替え"}
-          className="rounded-sm disabled:opacity-40 border border-stage-border bg-stage-surface2 px-2 py-1.5 text-xs text-white outline-none focus:border-white"
+          title={groupSwitchLocked ? "Stop playback to switch groups" : "Switch group"}
+          className="h-8 max-w-[12rem] rounded border border-stage-border bg-stage-surface px-2 text-sm text-stage-fg outline-none focus:border-stage-muted disabled:opacity-40"
         >
-          {groups.length === 0 && <option value="">団体なし</option>}
+          {groups.length === 0 && <option value="">No groups</option>}
           {groups.map((g) => (
             <option key={g.id} value={g.id}>
               {g.groupName}
             </option>
           ))}
         </select>
+      </div>
 
-        <button onClick={onExport} disabled={!currentGroup} className={btn} title="団体パッケージを書き出し (.stagepack)">
-          <Download size={13} /> 書き出し
+      <div className="flex min-w-[16rem] justify-center">
+        {editMode ? (
+          <input
+            value={currentGroup?.groupName ?? ""}
+            onChange={(e) => onRenameGroup(e.target.value)}
+            placeholder="Group name"
+            className="w-full rounded border border-stage-border bg-stage-surface px-3 py-1 text-center text-lg font-semibold text-stage-fg outline-none placeholder:text-stage-muted focus:border-stage-muted"
+          />
+        ) : (
+          <span className="truncate text-lg font-semibold text-stage-fg">{currentGroup?.groupName ?? ""}</span>
+        )}
+      </div>
+
+      <div className="flex items-center justify-end gap-2">
+        <button
+          onClick={() => {
+            blurActive();
+            onToggleEditMode();
+          }}
+          className={
+            editMode
+              ? "flex h-8 items-center gap-1.5 rounded bg-stage-fg px-3 text-sm font-medium text-stage-bg hover:bg-stage-fg/90"
+              : btn
+          }
+        >
+          {editMode ? <Check size={14} /> : <Pencil size={14} />}
+          {editMode ? "Done" : "Edit"}
         </button>
-        <button onClick={() => importInputRef.current?.click()} className={btn} title="団体パッケージを読み込み">
-          <Upload size={13} /> 読み込み
-        </button>
+
+        <div ref={menuRef} className="relative">
+          <button
+            onClick={() => {
+              blurActive();
+              setMenuOpen((v) => !v);
+            }}
+            className={`${btn} px-2`}
+            aria-label="More"
+            title="More"
+          >
+            <MoreHorizontal size={16} />
+          </button>
+
+          {menuOpen && (
+            <div className="absolute right-0 top-full z-50 mt-1 w-52 rounded-md border border-stage-border bg-stage-surface p-1 shadow-xl">
+              <MenuItem icon={<Upload size={14} />} label="Import…" onClick={() => runMenu(() => importInputRef.current?.click())} />
+              <MenuItem icon={<Download size={14} />} label="Export" disabled={!currentGroup} onClick={() => runMenu(onExport)} />
+              <div className="my-1 h-px bg-stage-border" />
+              <MenuItem icon={<FolderPlus size={14} />} label="New group" disabled={groupSwitchLocked} onClick={() => runMenu(onCreateGroup)} />
+              <MenuItem
+                icon={<Trash2 size={14} />}
+                label="Delete group"
+                danger
+                disabled={!currentGroup || groupSwitchLocked}
+                onClick={() => runMenu(onDeleteGroup)}
+              />
+              <div className="my-1 h-px bg-stage-border" />
+              {/* 出力機器の抜き差し後は "running" のまま無音になることがあるため、手動で再起動できるようにする。 */}
+              <MenuItem icon={<RotateCcw size={14} />} label="Restart audio" disabled={groupSwitchLocked} onClick={() => runMenu(onRestartAudio)} />
+            </div>
+          )}
+        </div>
+
         <input
           ref={importInputRef}
           type="file"
@@ -114,17 +178,6 @@ export function Header({
             e.target.value = "";
           }}
         />
-
-        <button
-          onClick={onToggleEditMode}
-          className={`flex items-center gap-1.5 rounded-sm border px-3 py-1.5 text-xs font-bold uppercase tracking-wide ${
-            editMode ? "border-white bg-white text-black" : "border-stage-border bg-stage-surface2 text-white hover:border-white"
-          }`}
-          title="編集 / 編集完了の切り替え"
-        >
-          {editMode ? <Check size={14} /> : <Pencil size={14} />}
-          {editMode ? "編集完了" : "編集"}
-        </button>
       </div>
     </header>
   );

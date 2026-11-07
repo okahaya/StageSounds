@@ -1,6 +1,6 @@
-# StageSounds
+# 音響くん
 
-大学祭のステージ企画（ダンス・演出等）向けの、キーボード操作による低遅延ポン出し（サンプラー）アプリケーション。
+大学祭のステージ企画（ダンス・演出等）向けの、キーボード操作で効果音・BGMを鳴らす、低遅延のステージ音響アプリ。
 React + TypeScript + Vite + Tailwind CSS + Web Audio API で構築されたブラウザ動作の Web アプリで、
 実行委員間の設定・音源共有は `.stagepack`（実体はZIP）アーカイブの入出力で行う。
 
@@ -11,9 +11,9 @@ React + TypeScript + Vite + Tailwind CSS + Web Audio API で構築されたブ�
 **👉 [最新版をダウンロード](https://github.com/okahaya/StageSounds/releases/latest)**
 
 1. 上のリンクを開く
-2. **Windows** の人は `StageSounds-Windows.exe` を、**Mac** の人は `StageSounds-macOS.zip` をクリックしてダウンロード
+2. **Windows** の人は `Onkyokun-Windows.exe` を、**Mac** の人は `Onkyokun-macOS.zip` をクリックしてダウンロード
 3. Windows: ダウンロードした `.exe` をダブルクリックで起動（インストール不要）
-   Mac: ダウンロードした `.zip` を解凍し、中の `StageSounds.app` をダブルクリックで起動
+   Mac: ダウンロードした `.zip` を解凍し、中の `音響くん.app` をダブルクリックで起動
    （「開発元が未確認」と表示されたら、アプリを右クリック→「開く」を選択）
 
 これで完了です。
@@ -141,7 +141,7 @@ npm run desktop:build:win-portable
 
 # macOS: .app バンドル（dmgインストーラーは作らない）
 npm run desktop:build:mac-app
-# -> src-tauri/target/release/bundle/macos/StageSounds.app
+# -> src-tauri/target/release/bundle/macos/音響くん.app
 ```
 
 - `--no-bundle`（Windows用スクリプト）は Rust バイナリのコンパイルのみ行い、NSIS/MSI インストーラー

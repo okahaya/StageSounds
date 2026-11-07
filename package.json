@@ -3,7 +3,7 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "description": "低遅延・高信頼性のステージ音響ポン出し（サンプラー）アプリケーション",
+  "description": "音響くん — キーボードで操作するステージ音響アプリ",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",

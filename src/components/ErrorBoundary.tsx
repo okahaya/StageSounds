@@ -29,32 +29,33 @@ export class ErrorBoundary extends Component<Props, State> {
   render() {
     if (this.state.error) {
       return (
-        <div className="flex h-screen flex-col bg-stage-bg font-mono text-sm text-stage-muted">
+        <div className="flex h-screen flex-col bg-stage-bg text-sm text-stage-muted">
           <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
-            <p className="text-base font-bold text-white">エラーが発生しました</p>
-            <p>音を止めるには下の赤いボタン、または Esc を押してください。</p>
+            <p className="text-base font-semibold text-stage-fg">Something went wrong</p>
+            <p>Press Esc or the red button below to stop all audio.</p>
             <p className="max-w-xl break-all text-xs text-stage-muted/70">{this.state.error.message}</p>
             <div className="mt-2 flex gap-2">
               <button
                 onClick={() => this.setState({ error: null })}
-                className="rounded border border-white bg-white px-4 py-2 font-bold text-black hover:bg-stage-muted"
+                className="rounded bg-stage-fg px-4 py-2 font-medium text-stage-bg hover:bg-stage-fg/90"
               >
-                その場で復旧（音は止めない）
+                Recover (keep audio)
               </button>
               <button
                 onClick={() => window.location.reload()}
-                className="rounded border border-stage-border px-4 py-2 text-white hover:bg-stage-surface"
+                className="rounded border border-stage-border px-4 py-2 text-stage-fg hover:bg-stage-surface"
               >
-                再読み込み
+                Reload
               </button>
             </div>
           </div>
           <button
             onClick={() => audioManager.panicStop()}
-            className="flex h-14 w-full shrink-0 items-center justify-center gap-3 bg-stage-danger text-white hover:bg-red-500"
+            className="flex h-12 w-full shrink-0 items-center justify-center gap-2.5 bg-stage-danger text-white hover:bg-stage-danger/90"
           >
-            <OctagonX size={22} strokeWidth={2.5} />
-            <span className="text-base font-black uppercase tracking-[0.3em]">Esc — All Stop</span>
+            <OctagonX size={20} strokeWidth={2.25} />
+            <span className="text-base font-semibold">Stop All</span>
+            <kbd className="rounded-sm bg-black/20 px-1.5 py-0.5 font-mono text-xs">Esc</kbd>
           </button>
         </div>
       );

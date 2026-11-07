@@ -2,14 +2,29 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * 色はここで一元管理する(Tailwind の stage-* はこの CSS 変数を参照する)。
+ * 方針: 無彩色(zinc 系) + アクセント1色。赤は緊急停止とエラーにだけ使う。
+ */
 @layer base {
+  :root {
+    --stage-bg: 9 9 11;          /* zinc-950 */
+    --stage-surface: 24 24 27;   /* zinc-900 */
+    --stage-surface2: 18 18 20;
+    --stage-border: 39 39 42;    /* zinc-800 */
+    --stage-muted: 161 161 170;  /* zinc-400 */
+    --stage-fg: 244 244 245;     /* zinc-100 */
+    --stage-accent: 74 222 128;  /* 再生中 */
+    --stage-danger: 229 72 77;
+  }
+
   html,
   body,
   #root {
     height: 100%;
   }
   body {
-    @apply bg-stage-bg text-gray-100;
+    @apply bg-stage-bg font-sans text-stage-fg;
     -webkit-font-smoothing: antialiased;
     overscroll-behavior: none;
   }

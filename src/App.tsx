@@ -356,7 +356,7 @@ export default function App() {
       audioManagerRef.current.trigger(key, buffer, { fadeIn: slot.fadeIn, fadeOut: slot.fadeOut, loop: slot.loop });
     } catch (err) {
       console.error("再生に失敗しました", err);
-      showError(`[${keyDisplayFor(key)}] 再生に失敗しました。ステータスバーの AUDIO を確認してください`);
+      showError(`[${keyDisplayFor(key)}] 再生に失敗しました。メニューの Restart audio を試してください`);
     }
   }
 
@@ -596,8 +596,8 @@ export default function App() {
 
   if (loading) {
     return (
-      <div className="flex h-screen items-center justify-center bg-stage-bg font-mono text-sm text-stage-muted">
-        読み込み中…
+      <div className="flex h-screen items-center justify-center bg-stage-bg text-sm text-stage-muted">
+        Loading…
       </div>
     );
   }
@@ -631,6 +631,7 @@ export default function App() {
         onRenameGroup={handleRenameGroup}
         onToggleEditMode={toggleEditMode}
         groupSwitchLocked={isPlaying}
+        onRestartAudio={() => void audioManagerRef.current.restartContext()}
         onExport={() => void handleExport()}
         onImportFile={(file) => void handleImportFile(file)}
       />
@@ -648,15 +649,15 @@ export default function App() {
             onDropFile={(key, file) => void handleAssignFile(key, file)}
           />
         ) : (
-          <div className="flex h-full items-center justify-center font-mono text-sm text-stage-muted">
-            団体がありません。「新規団体」から作成してください。
+          <div className="flex h-full items-center justify-center text-sm text-stage-muted">
+            No groups yet. Create one from the ⋯ menu.
           </div>
         )}
 
         {windowDragActive && (
-          <div className="pointer-events-none absolute inset-0 flex items-center justify-center border-2 border-dashed border-white bg-stage-bg/90">
-            <span className="font-mono text-lg font-bold uppercase tracking-wide text-white">
-              .stagepack / .zip をドロップして団体を読み込み
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center m-4 rounded-md border-2 border-dashed border-stage-muted bg-stage-bg/90">
+            <span className="text-lg font-medium text-stage-fg">
+              Drop .stagepack / .zip to import
             </span>
           </div>
         )}
@@ -672,7 +673,6 @@ export default function App() {
       />
 
       <SystemStatusBar
-        editMode={editMode}
         slotHealth={slotHealth}
         decodedBytes={decodedBytes}
         isPlaying={isPlaying}
@@ -682,11 +682,12 @@ export default function App() {
       <button
         tabIndex={-1}
         onClick={handlePanic}
-        className="flex h-14 w-full shrink-0 items-center justify-center gap-3 border-t-2 border-red-900 bg-stage-danger text-white shadow-[inset_0_2px_0_rgba(255,255,255,0.15),inset_0_-3px_0_rgba(0,0,0,0.35)] transition-colors hover:bg-red-500 active:shadow-[inset_0_3px_6px_rgba(0,0,0,0.5)]"
-        title="緊急停止 (Esc)"
+        className="flex h-12 w-full shrink-0 items-center justify-center gap-2.5 bg-stage-danger text-white transition-colors hover:bg-stage-danger/90 active:bg-stage-danger/80"
+        title="Stop all (Esc)"
       >
-        <OctagonX size={22} strokeWidth={2.5} />
-        <span className="font-mono text-base font-black uppercase tracking-[0.3em]">Esc — All Stop</span>
+        <OctagonX size={20} strokeWidth={2.25} />
+        <span className="text-base font-semibold">Stop All</span>
+        <kbd className="rounded-sm bg-black/20 px-1.5 py-0.5 font-mono text-xs">Esc</kbd>
       </button>
 
       {editingSlot && (

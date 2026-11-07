@@ -1,27 +1,31 @@
 /** @type {import('tailwindcss').Config} */
+const token = (name) => `rgb(var(--stage-${name}) / <alpha-value>)`;
+
 export default {
   content: ["./index.html", "./src/**/*.{js,ts,jsx,tsx}"],
   theme: {
     extend: {
       colors: {
         stage: {
-          bg: "#0f1012",
-          surface: "#1e2227",
-          surface2: "#17191c",
-          border: "#2a2f37",
-          muted: "#9ba3af",
-          playing: "#00e676",
-          fading: "#f59e0b",
-          danger: "#ef4444",
+          bg: token("bg"),
+          surface: token("surface"),
+          surface2: token("surface2"),
+          border: token("border"),
+          muted: token("muted"),
+          fg: token("fg"),
+          accent: token("accent"),
+          danger: token("danger"),
         },
       },
       fontFamily: {
+        // オフライン動作(PWA / Tauri)のため Web フォントは読み込まず、OS 標準フォントを使う。
+        sans: ["system-ui", "-apple-system", "Segoe UI", "Hiragino Sans", "Yu Gothic UI", "Meiryo", "sans-serif"],
         mono: ["ui-monospace", "SFMono-Regular", "Menlo", "Monaco", "Consolas", "monospace"],
       },
       borderRadius: {
-        sm: "3px",
-        DEFAULT: "3px",
-        md: "4px",
+        sm: "4px",
+        DEFAULT: "6px",
+        md: "8px",
       },
     },
   },

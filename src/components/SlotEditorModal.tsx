@@ -32,59 +32,50 @@ export function SlotEditorModal({ slot, onClose, onSave, onAssignFile, onRemoveF
     onClose();
   }
 
+  const labelClass = "mb-1.5 block text-xs font-medium text-stage-muted";
+  const inputClass =
+    "w-full rounded border border-stage-border bg-stage-bg px-3 py-2 text-sm text-stage-fg outline-none placeholder:text-stage-muted/60 focus:border-stage-muted";
+
   return (
-    <div data-modal-open className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4" onClick={commitAndClose}>
+    <div data-modal-open className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={commitAndClose}>
       <div
-        className="w-full max-w-md rounded-sm border border-stage-border bg-stage-surface p-5"
+        className="w-full max-w-md rounded-md border border-stage-border bg-stage-surface p-5 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="mb-4 flex items-center justify-between border-b border-stage-border pb-3">
-          <h2 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-white">
-            スロット編集
-            <span className="rounded-sm border border-stage-border bg-stage-bg px-2 py-0.5 font-mono text-base text-white">
+        <div className="mb-5 flex items-center justify-between">
+          <h2 className="flex items-center gap-2.5 text-base font-semibold text-stage-fg">
+            <kbd className="rounded-sm border border-stage-border bg-stage-bg px-2 py-0.5 font-mono text-sm">
               {keyDisplayFor(slot.key)}
-            </span>
+            </kbd>
+            Edit slot
           </h2>
-          <button
-            onClick={commitAndClose}
-            className="rounded-sm border border-stage-border p-1 text-stage-muted hover:border-white hover:text-white"
-          >
+          <button onClick={commitAndClose} className="rounded p-1 text-stage-muted hover:bg-stage-fg/10 hover:text-stage-fg" aria-label="Close">
             <X size={16} />
           </button>
         </div>
 
-        <div className="space-y-4">
+        <div className="space-y-5">
           <div>
-            <label className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-stage-muted">
-              トラック名
-            </label>
-            <input
-              type="text"
-              value={label}
-              onChange={(e) => setLabel(e.target.value)}
-              className="w-full rounded-sm border border-stage-border bg-stage-bg px-3 py-2 text-sm text-white outline-none focus:border-white"
-              placeholder="例: オープニングSE"
-            />
+            <label className={labelClass}>Name</label>
+            <input type="text" value={label} onChange={(e) => setLabel(e.target.value)} className={inputClass} placeholder="e.g. Opening SE" />
           </div>
 
           <div>
-            <label className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-stage-muted">
-              音源ファイル
-            </label>
+            <label className={labelClass}>Audio file</label>
             <div className="flex items-center gap-2">
-              <span className="flex-1 truncate rounded-sm border border-stage-border bg-stage-bg px-3 py-2 text-sm text-stage-muted">
-                {slot.fileName ?? "未割当"}
-              </span>
+              <span className={`${inputClass} flex-1 truncate text-stage-muted`}>{slot.fileName ?? "None"}</span>
               <button
                 onClick={() => fileInputRef.current?.click()}
-                className="flex items-center gap-1 rounded-sm border border-stage-border bg-stage-surface2 px-3 py-2 text-sm text-white hover:border-white"
+                className="flex shrink-0 items-center gap-1.5 rounded border border-stage-border px-3 py-2 text-sm text-stage-fg hover:bg-stage-fg/5"
               >
-                <FolderOpen size={14} /> 選択
+                <FolderOpen size={14} /> Browse
               </button>
               {slot.fileName && (
                 <button
                   onClick={onRemoveFile}
-                  className="flex items-center gap-1 rounded-sm border border-stage-danger/50 bg-stage-danger/10 px-3 py-2 text-sm text-stage-danger hover:border-stage-danger"
+                  className="shrink-0 rounded border border-stage-border p-2 text-stage-danger hover:bg-stage-danger/10"
+                  aria-label="Remove file"
+                  title="Remove file"
                 >
                   <Trash2 size={14} />
                 </button>
@@ -103,55 +94,48 @@ export function SlotEditorModal({ slot, onClose, onSave, onAssignFile, onRemoveF
             />
           </div>
 
-          <div>
-            <label className="mb-1 flex justify-between text-[11px] font-bold uppercase tracking-wide text-stage-muted">
-              <span>フェードイン</span>
-              <span className="font-mono text-white">{fadeIn.toFixed(1)}s</span>
-            </label>
-            <input
-              type="range"
-              min={0}
-              max={5}
-              step={0.1}
-              value={fadeIn}
-              onChange={(e) => setFadeIn(Number(e.target.value))}
-              className="w-full accent-white"
-            />
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className={`${labelClass} flex justify-between`}>
+                <span>Fade in</span>
+                <span className="font-mono tabular-nums text-stage-fg">{fadeIn.toFixed(1)}s</span>
+              </label>
+              <input
+                type="range"
+                min={0}
+                max={5}
+                step={0.1}
+                value={fadeIn}
+                onChange={(e) => setFadeIn(Number(e.target.value))}
+                className="w-full accent-stage-fg"
+              />
+            </div>
+            <div>
+              <label className={`${labelClass} flex justify-between`}>
+                <span>Fade out</span>
+                <span className="font-mono tabular-nums text-stage-fg">{fadeOut.toFixed(1)}s</span>
+              </label>
+              <input
+                type="range"
+                min={0}
+                max={5}
+                step={0.1}
+                value={fadeOut}
+                onChange={(e) => setFadeOut(Number(e.target.value))}
+                className="w-full accent-stage-fg"
+              />
+            </div>
           </div>
 
-          <div>
-            <label className="mb-1 flex justify-between text-[11px] font-bold uppercase tracking-wide text-stage-muted">
-              <span>フェードアウト</span>
-              <span className="font-mono text-white">{fadeOut.toFixed(1)}s</span>
-            </label>
-            <input
-              type="range"
-              min={0}
-              max={5}
-              step={0.1}
-              value={fadeOut}
-              onChange={(e) => setFadeOut(Number(e.target.value))}
-              className="w-full accent-white"
-            />
-          </div>
-
-          <label className="flex items-center gap-2 text-sm text-white">
-            <input
-              type="checkbox"
-              checked={loop}
-              onChange={(e) => setLoop(e.target.checked)}
-              className="h-4 w-4 accent-white"
-            />
-            ループ再生 (Repeat)
+          <label className="flex cursor-pointer items-center gap-2.5 text-sm text-stage-fg">
+            <input type="checkbox" checked={loop} onChange={(e) => setLoop(e.target.checked)} className="h-4 w-4 accent-stage-fg" />
+            Loop
           </label>
         </div>
 
-        <div className="mt-5 flex justify-end gap-2 border-t border-stage-border pt-4">
-          <button
-            onClick={commitAndClose}
-            className="rounded-sm bg-white px-4 py-2 text-sm font-bold uppercase tracking-wide text-black hover:bg-stage-muted"
-          >
-            完了
+        <div className="mt-6 flex justify-end">
+          <button onClick={commitAndClose} className="rounded bg-stage-fg px-4 py-2 text-sm font-medium text-stage-bg hover:bg-stage-fg/90">
+            Done
           </button>
         </div>
       </div>
